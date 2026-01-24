@@ -50,13 +50,13 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
   const priorityInfo = item.priority ? PRIORITY_LEVELS.find(p => p.level === item.priority) : null;
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border ${item.purchased ? 'border-green-200 bg-green-50' : 'border-gray-200'} p-4 transition-colors duration-200`}>
-      <div className="flex items-start gap-3">
+    <div className={`bg-white rounded-lg shadow-sm border ${item.purchased ? 'border-green-200 bg-green-50' : 'border-gray-200'} p-3 sm:p-4 transition-colors duration-200`}>
+      <div className="flex items-start gap-2 sm:gap-3">
         <input
           type="checkbox"
           checked={item.purchased}
           onChange={handleToggle}
-          className="mt-1 w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+          className="mt-0.5 sm:mt-1 w-4 h-4 sm:w-5 sm:h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
         />
 
         {item.imageUrl && (
@@ -67,7 +67,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
             <img
               src={toHttps(item.imageUrl)}
               alt={item.name}
-              className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+              className="w-14 h-14 sm:w-20 sm:h-20 object-cover rounded-lg border border-gray-200"
             />
           </div>
         )}
@@ -75,8 +75,8 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className={`font-medium ${item.purchased ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h4 className={`font-medium text-sm sm:text-base ${item.purchased ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                   {item.name}
                 </h4>
                 {priorityInfo && (
@@ -130,9 +130,9 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
             </div>
           </div>
 
-          <div className="flex items-center gap-4 mt-2 text-sm">
+          <div className="flex items-center gap-2 sm:gap-4 mt-1.5 sm:mt-2 text-xs sm:text-sm">
             <span className="text-gray-600">Qty: {item.quantity}</span>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-0.5 sm:gap-1">
               <span className="font-medium text-gray-900">
                 {formatCurrency(item.price * item.quantity, item.currency)}
               </span>
@@ -148,7 +148,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
           </div>
 
           {item.description && (
-            <div className="mt-2 text-sm text-gray-600">
+            <div className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-gray-600">
               {item.description.length > 150 && !showFullDescription ? (
                 <>
                   <p>{item.description.substring(0, 150)}...</p>
@@ -180,15 +180,16 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
               href={item.productUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 hover:underline"
+              className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 text-xs sm:text-sm text-purple-600 hover:text-purple-700 hover:underline"
             >
-              <ExternalLink className="w-4 h-4" />
-              <span>View product page</span>
+              <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">View product page</span>
+              <span className="sm:hidden">Product link</span>
             </a>
           )}
 
           {item.notes && (
-            <p className="mt-2 text-sm text-gray-500 italic">{item.notes}</p>
+            <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-gray-500 italic">{item.notes}</p>
           )}
         </div>
       </div>
