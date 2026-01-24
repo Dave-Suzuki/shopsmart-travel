@@ -1,0 +1,12 @@
+Please copy the ENTIRE firebaseConfig object from the Firebase Console (the Config tab you have open) and paste it here, replacing this text.
+
+Go to: https://console.firebase.google.com/u/0/project/shopsmart-800cb/settings/general
+Click on the "Config" radio button under "SDK の設定と構成"
+Then select and copy the ENTIRE JavaScript object that starts with:
+
+const firebaseConfig = {
+  apiKey: "...",
+  ...
+};
+
+Paste it here to replace this text.

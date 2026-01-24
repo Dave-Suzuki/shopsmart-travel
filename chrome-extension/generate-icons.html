@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate ShopSmart Icons</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    canvas { border: 1px solid #ccc; margin: 10px; }
+    a { display: block; margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <h1>ShopSmart Icon Generator</h1>
+  <p>Right-click each canvas and "Save image as..." to save the icons.</p>
+
+  <div>
+    <h3>icon16.png</h3>
+    <canvas id="icon16" width="16" height="16"></canvas>
+  </div>
+
+  <div>
+    <h3>icon48.png</h3>
+    <canvas id="icon48" width="48" height="48"></canvas>
+  </div>
+
+  <div>
+    <h3>icon128.png</h3>
+    <canvas id="icon128" width="128" height="128"></canvas>
+  </div>
+
+  <script>
+    function drawIcon(canvas) {
+      const ctx = canvas.getContext('2d');
+      const size = canvas.width;
+      const scale = size / 128;
+
+      // Blue background with rounded corners
+      ctx.fillStyle = '#2563EB';
+      const radius = 24 * scale;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, radius);
+      ctx.fill();
+
+      // Draw shopping cart icon
+      ctx.strokeStyle = 'white';
+      ctx.fillStyle = 'white';
+      ctx.lineWidth = 2.5 * scale;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const offsetX = 24 * scale;
+      const offsetY = 24 * scale;
+      const iconScale = 3.33 * scale;
+
+      // Cart wheels
+      ctx.beginPath();
+      ctx.arc(offsetX + 9 * iconScale, offsetY + 21 * iconScale, 1.5 * iconScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(offsetX + 20 * iconScale, offsetY + 21 * iconScale, 1.5 * iconScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cart body
+      ctx.beginPath();
+      ctx.moveTo(offsetX + 1 * iconScale, offsetY + 1 * iconScale);
+      ctx.lineTo(offsetX + 5 * iconScale, offsetY + 1 * iconScale);
+      ctx.lineTo(offsetX + 7.68 * iconScale, offsetY + 14.39 * iconScale);
+      ctx.lineTo(offsetX + 21.32 * iconScale, offsetY + 14.39 * iconScale);
+      ctx.lineTo(offsetX + 23 * iconScale, offsetY + 6 * iconScale);
+      ctx.lineTo(offsetX + 6 * iconScale, offsetY + 6 * iconScale);
+      ctx.stroke();
+    }
+
+    ['icon16', 'icon48', 'icon128'].forEach(id => {
+      drawIcon(document.getElementById(id));
+    });
+  </script>
+</body>
+</html>
