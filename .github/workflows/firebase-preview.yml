@@ -1,0 +1,77 @@
+name: Deploy Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Preview Channel
+        id: firebase-deploy
+        run: |
+          OUTPUT=$(firebase hosting:channel:deploy pr-${{ github.event.pull_request.number }} \
+            --project shopsmart-800cb \
+            --expires 7d \
+            --json)
+          echo "deploy_output=$OUTPUT" >> $GITHUB_OUTPUT
+          URL=$(echo $OUTPUT | jq -r '.result["shopsmart-800cb"].url')
+          echo "preview_url=$URL" >> $GITHUB_OUTPUT
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Comment Preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const previewUrl = '${{ steps.firebase-deploy.outputs.preview_url }}';
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+
+            const botComment = comments.data.find(c =>
+              c.body.includes('🔥 Firebase Preview')
+            );
+
+            const body = `🔥 **Firebase Preview**\n\n📱 Preview URL: ${previewUrl}\n\n_This preview will expire in 7 days._`;
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
+            }
