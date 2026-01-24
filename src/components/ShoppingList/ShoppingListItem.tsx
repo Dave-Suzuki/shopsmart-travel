@@ -67,7 +67,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
             <img
               src={toHttps(item.imageUrl)}
               alt={item.name}
-              className="w-10 h-10 sm:w-20 sm:h-20 object-cover rounded-lg border border-gray-200"
+              className="w-14 h-14 sm:w-20 sm:h-20 object-cover rounded-lg border border-gray-200"
             />
           </div>
         )}
@@ -89,7 +89,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
                   </span>
                 )}
               </div>
-              <div className="hidden sm:flex items-center gap-2 mt-1 flex-wrap">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {item.brand && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
                     {item.brand}
@@ -148,7 +148,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
           </div>
 
           {item.description && (
-            <div className="hidden sm:block mt-2 text-sm text-gray-600">
+            <div className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-gray-600">
               {item.description.length > 150 && !showFullDescription ? (
                 <>
                   <p>{item.description.substring(0, 150)}...</p>
@@ -180,15 +180,16 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
               href={item.productUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden sm:inline-flex mt-2 items-center gap-1 text-sm text-purple-600 hover:text-purple-700 hover:underline"
+              className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 text-xs sm:text-sm text-purple-600 hover:text-purple-700 hover:underline"
             >
-              <ExternalLink className="w-4 h-4" />
-              <span>View product page</span>
+              <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">View product page</span>
+              <span className="sm:hidden">Product link</span>
             </a>
           )}
 
           {item.notes && (
-            <p className="hidden sm:block mt-2 text-sm text-gray-500 italic">{item.notes}</p>
+            <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-gray-500 italic">{item.notes}</p>
           )}
         </div>
       </div>
