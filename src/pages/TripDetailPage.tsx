@@ -30,7 +30,7 @@ export function TripDetailPage() {
   const { rates } = useExchangeRate();
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [filters, setFilters] = useState<ItemFilters>({ status: 'all' });
-  const [viewMode, setViewMode] = useState<'list' | 'tile'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'tile'>('tile');
   const [sortBy, setSortBy] = useState<SortOption>('date-newest');
 
   // Deep linking state for AddShoppingItem modal
