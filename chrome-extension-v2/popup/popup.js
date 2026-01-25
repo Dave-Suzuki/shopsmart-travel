@@ -4,6 +4,24 @@
  */
 
 const SHOPSMART_URL = 'https://shopsmart-800cb.web.app/app';
+const SHOPSMART_ORIGIN = 'https://shopsmart-800cb.web.app';
+
+// Helper to open or reuse existing ShopSmart tab
+async function openOrReuseTab(url) {
+  // Query for existing ShopSmart tabs
+  const tabs = await chrome.tabs.query({ url: `${SHOPSMART_ORIGIN}/*` });
+
+  if (tabs.length > 0) {
+    // Reuse the first existing tab
+    const existingTab = tabs[0];
+    await chrome.tabs.update(existingTab.id, { url, active: true });
+    // Focus the window containing the tab
+    await chrome.windows.update(existingTab.windowId, { focused: true });
+  } else {
+    // No existing tab, create a new one
+    chrome.tabs.create({ url });
+  }
+}
 
 // Helper to ensure content script is injected before sending message
 async function sendMessageToTab(tabId, message) {
@@ -187,9 +205,9 @@ async function init() {
       const itemData = btoa(unescape(encodeURIComponent(JSON.stringify(response.product))));
       const url = `${SHOPSMART_URL}/trip/${tripId}?addItem=true&itemData=${encodeURIComponent(itemData)}`;
       console.log('Opening URL:', url);
-      chrome.tabs.create({ url });
+      await openOrReuseTab(url);
 
-      showStatus('Opening ShopSmart...', 'success');
+      showStatus('Adding to ShopSmart...', 'success');
     } catch (error) {
       console.error('Error adding item:', error);
       showStatus(error.message || 'Failed to add item', 'error');
@@ -228,7 +246,7 @@ async function init() {
 
       const itemsData = btoa(JSON.stringify(response.items));
       const url = `${SHOPSMART_URL}/trip/${tripId}/import?items=${encodeURIComponent(itemsData)}`;
-      chrome.tabs.create({ url });
+      await openOrReuseTab(url);
 
       showStatus(`Importing ${response.items.length} items...`, 'success');
     } catch (error) {
