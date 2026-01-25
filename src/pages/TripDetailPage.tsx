@@ -181,7 +181,7 @@ export function TripDetailPage() {
   const totalItems = items.length;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <button
         onClick={() => navigate('/')}
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
@@ -359,7 +359,7 @@ export function TripDetailPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
             {filteredAndSortedItems.map((item) => (
               <ShoppingListItemTile
                 key={item.id}
