@@ -6,6 +6,7 @@ import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { formatCurrency } from '../../utils/currency';
 import { toHttps } from '../../utils/url';
 import { showError } from '../../utils/toast';
+import { celebrateSaving, showCoins } from '../../utils/confetti';
 import { ImageModal } from '../Shared/ImageModal';
 import { PurchaseRecordModal } from './PurchaseRecordModal';
 
@@ -51,7 +52,14 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
 
   const handleSaveForLater = async () => {
     try {
-      await onSaveForLater(item.id, !item.savedForLater);
+      const savingForLater = !item.savedForLater;
+      await onSaveForLater(item.id, savingForLater);
+      // Trigger confetti effects
+      if (savingForLater) {
+        celebrateSaving(); // Green confetti for saving money
+      } else {
+        showCoins(); // Gold coins for spending more
+      }
     } catch (error) {
       showError('Failed to update item');
     }
