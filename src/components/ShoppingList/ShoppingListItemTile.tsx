@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Tag, Edit, DollarSign, ExternalLink } from 'lucide-react';
+import { Trash2, Tag, Edit, DollarSign, ExternalLink, Bookmark, RotateCcw } from 'lucide-react';
 import type { ShoppingListItem as Item, UpdateShoppingListItemInput } from '../../types/ShoppingList';
 import type { TripLocation } from '../../types/Trip';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
@@ -15,11 +15,12 @@ interface ShoppingListItemTileProps {
   onUpdateItem: (itemId: string, updates: UpdateShoppingListItemInput) => Promise<void>;
   onDelete: (itemId: string) => Promise<void>;
   onEdit: (item: Item) => void;
+  onSaveForLater: (itemId: string, savedForLater: boolean) => Promise<void>;
   tripLocations?: TripLocation[];
   budgetCurrency: string;
 }
 
-export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, onDelete, onEdit, tripLocations = [], budgetCurrency }: ShoppingListItemTileProps) {
+export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, onDelete, onEdit, onSaveForLater, tripLocations = [], budgetCurrency }: ShoppingListItemTileProps) {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
@@ -42,6 +43,14 @@ export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, on
       } catch (error) {
         showError('Failed to delete item');
       }
+    }
+  };
+
+  const handleSaveForLater = async () => {
+    try {
+      await onSaveForLater(item.id, !item.savedForLater);
+    } catch (error) {
+      showError('Failed to update item');
     }
   };
 
@@ -132,20 +141,35 @@ export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, on
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200">
+        <div className="flex justify-center gap-2 pt-2 sm:pt-3 border-t border-gray-200">
           <button
             onClick={() => onEdit(item)}
-            className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+            title="Edit"
           >
-            <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Edit</span>
+            <Edit className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleSaveForLater}
+            className={`p-2 rounded-lg transition-colors duration-200 ${
+              item.savedForLater
+                ? 'text-green-600 hover:bg-green-50'
+                : 'text-amber-600 hover:bg-amber-50'
+            }`}
+            title={item.savedForLater ? 'Restore to list' : 'Save for later'}
+          >
+            {item.savedForLater ? (
+              <RotateCcw className="w-5 h-5" />
+            ) : (
+              <Bookmark className="w-5 h-5" />
+            )}
           </button>
           <button
             onClick={handleDelete}
-            className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+            title="Delete"
           >
-            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Delete</span>
+            <Trash2 className="w-5 h-5" />
           </button>
         </div>
       </div>

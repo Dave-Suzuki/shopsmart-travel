@@ -237,6 +237,10 @@ export function useShoppingList(tripId: string | null) {
     await updateItem(itemId, { purchased });
   };
 
+  const saveForLater = async (itemId: string, savedForLater: boolean) => {
+    await updateItem(itemId, { savedForLater });
+  };
+
   return {
     items,
     loading,
@@ -246,5 +250,6 @@ export function useShoppingList(tripId: string | null) {
     updateItem,
     deleteItem,
     togglePurchased,
+    saveForLater,
   };
 }

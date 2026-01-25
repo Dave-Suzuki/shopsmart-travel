@@ -34,6 +34,15 @@ body {
   font-weight: 600;
 }
 
+.version-badge {
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
 .main {
   padding: 16px;
 }

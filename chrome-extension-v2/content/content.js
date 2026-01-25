@@ -34,25 +34,60 @@
     return true;
   });
 
+  // Helper to check if URL indicates a cart page
+  function isCartUrl() {
+    const pathname = window.location.pathname.toLowerCase();
+    // Match cart URLs: /cart, /my-cart, /shopping-cart, /basket, /bag, /checkout, etc.
+    // Must be a path segment ending (not substring like "ultramarine")
+    const cartPathPattern = /\/(cart|my-cart|basket|bag|checkout|shopping-bag|shopping-cart|viewcart|panier|carrello|warenkorb)(\/|$|\?)/;
+    return cartPathPattern.test(pathname);
+  }
+
   function isProductPage() {
-    const hasAddToCart = !!document.querySelector('[class*="add-to-cart"], [id*="add-to-cart"], button[name="add"], [data-action="add-to-cart"]');
+    // If URL clearly indicates a cart page, it's NOT a product page
+    if (isCartUrl()) {
+      return false;
+    }
+
+    // Check for add-to-cart buttons (strong indicator)
+    const hasAddToCart = !!document.querySelector('[class*="add-to-cart"], [id*="add-to-cart"], button[name="add"], [data-action="add-to-cart"], [class*="add-to-bag"], [class*="addtobag"], [class*="AddToBag"]');
+
+    // Check for product structured data
     const hasProductSchema = !!document.querySelector('script[type="application/ld+json"]');
     const hasProductMeta = !!document.querySelector('meta[property="og:type"][content="product"], meta[property="product:price:amount"]');
     const hasPrice = !!document.querySelector('[class*="price"], [itemprop="price"]');
 
-    return hasAddToCart || (hasProductSchema && hasPrice) || hasProductMeta;
+    // Check URL patterns for product pages
+    const pathname = window.location.pathname.toLowerCase();
+    const isProductUrl = /\/(p|product|products|item|items|pd|pdp)[-\/]/.test(pathname) ||
+                         /\/(p|product|products|item|items)\//.test(pathname);
+
+    return hasAddToCart || (hasProductSchema && hasPrice) || hasProductMeta || isProductUrl;
   }
 
   function isCartPage() {
-    const url = window.location.href.toLowerCase();
-    const pathname = window.location.pathname.toLowerCase();
+    // Check cart URL first (highest priority)
+    if (isCartUrl()) {
+      return true;
+    }
 
-    return url.includes('/cart') ||
-           url.includes('/basket') ||
-           url.includes('/bag') ||
-           pathname.includes('cart') ||
-           pathname.includes('checkout') ||
-           !!document.querySelector('[class*="cart-item"], [class*="basket-item"], [data-cart-item]');
+    // If it's clearly a product page, not a cart
+    if (isProductPage()) {
+      return false;
+    }
+
+    // Check for cart-specific page elements (more specific selectors)
+    const hasCartElements = !!document.querySelector(
+      '[data-cart-item], ' +
+      '[class*="cart-item"]:not([class*="add-to-cart"]), ' +
+      '[class*="basket-item"], ' +
+      '[class*="cart-product"], ' +
+      '[class*="cart-line-item"], ' +
+      '.mini-cart-item, ' +
+      '.shopping-bag-item'
+    );
+
+    return hasCartElements;
   }
 
   function scrapeProduct() {
@@ -344,30 +379,134 @@
       return scrapeShopifyCart();
     }
 
-    // Generic cart scraping
-    const cartItems = document.querySelectorAll('[class*="cart-item"], [class*="basket-item"], [class*="line-item"], [data-cart-item]');
+    // Detect currency from page
+    const currencyMatch = document.body.innerHTML.match(/[€£¥]|EUR|GBP|JPY|USD/);
+    let detectedCurrency = 'USD';
+    if (currencyMatch) {
+      const curr = currencyMatch[0];
+      if (curr === '€' || curr === 'EUR') detectedCurrency = 'EUR';
+      else if (curr === '£' || curr === 'GBP') detectedCurrency = 'GBP';
+      else if (curr === '¥' || curr === 'JPY') detectedCurrency = 'JPY';
+    }
+
+    // Try multiple cart item selectors (broader coverage)
+    const cartItemSelectors = [
+      '[class*="cart-item"]',
+      '[class*="basket-item"]',
+      '[class*="line-item"]',
+      '[data-cart-item]',
+      '[class*="cart-product"]',
+      '[class*="product-line"]',
+      '[data-product-line-item]',
+      '.product-info',
+      '[class*="panier"] [class*="product"]',
+      '[class*="cart"] [class*="product"]',
+      // Demandware/SFCC
+      '.cart-row',
+      '.product-list-item',
+      '.order-product-summary .product',
+      // Generic rows with product info
+      '[class*="item-row"]',
+      '[class*="product-row"]'
+    ];
+
+    let cartItems = [];
+    for (const selector of cartItemSelectors) {
+      const found = document.querySelectorAll(selector);
+      if (found.length > 0) {
+        cartItems = found;
+        console.log('ShopSmart: Found cart items with selector:', selector, found.length);
+        break;
+      }
+    }
+
+    // If still no items found, try to find repeating product patterns
+    if (cartItems.length === 0) {
+      // Look for containers that have images and prices together
+      const containers = document.querySelectorAll('div, article, li, tr');
+      const productContainers = Array.from(containers).filter(el => {
+        const hasImage = el.querySelector('img');
+        const hasPrice = el.textContent.match(/[€£$¥]\s*[\d,.]+|[\d,.]+\s*[€£$¥]/);
+        const isSmallEnough = el.querySelectorAll('img').length <= 2;
+        const hasText = el.textContent.trim().length > 10 && el.textContent.trim().length < 500;
+        return hasImage && hasPrice && isSmallEnough && hasText;
+      });
+
+      // Filter to get the most specific containers (not parents of other matches)
+      cartItems = productContainers.filter(el =>
+        !productContainers.some(other => other !== el && el.contains(other))
+      );
+      console.log('ShopSmart: Found cart items via pattern matching:', cartItems.length);
+    }
 
     cartItems.forEach((item, index) => {
-      const nameEl = item.querySelector('[class*="name"], [class*="title"], h2, h3, a');
-      const priceEl = item.querySelector('[class*="price"]');
-      const imageEl = item.querySelector('img');
-      const qtyEl = item.querySelector('input[type="number"], [class*="quantity"]');
+      // Try multiple selectors for product name
+      const nameEl = item.querySelector(
+        '[class*="name"], [class*="title"], [class*="product-name"], ' +
+        '[class*="item-name"], [class*="product-title"], ' +
+        'h1, h2, h3, h4, a[href*="product"], a[href*="/p"]'
+      );
 
-      if (nameEl) {
-        const priceText = priceEl?.textContent || '';
-        const priceMatch = priceText.match(/[\d,.]+/);
+      // Try multiple selectors for price
+      const priceEl = item.querySelector(
+        '[class*="price"]:not([class*="per"]):not([class*="unit"]), ' +
+        '[class*="total"], [class*="amount"], [class*="cost"]'
+      );
+
+      const imageEl = item.querySelector('img');
+      const qtyEl = item.querySelector(
+        'input[type="number"], [class*="quantity"], [class*="qty"]'
+      );
+
+      // Extract product name
+      let name = nameEl?.textContent?.trim();
+      if (!name && imageEl?.alt) {
+        name = imageEl.alt;
+      }
+
+      if (name) {
+        // Extract price - handle European format
+        let price = null;
+        const priceText = priceEl?.textContent || item.textContent || '';
+        const priceMatch = priceText.match(/[€£$¥]\s*([\d\s,.]+)|([\d\s,.]+)\s*[€£$¥]/);
+        if (priceMatch) {
+          let priceStr = (priceMatch[1] || priceMatch[2]).replace(/\s/g, '');
+          // Handle European format (comma as decimal)
+          if (priceStr.includes(',') && !priceStr.includes('.')) {
+            priceStr = priceStr.replace(',', '.');
+          } else if (priceStr.includes(',') && priceStr.includes('.')) {
+            priceStr = priceStr.replace(',', '');
+          }
+          price = parseFloat(priceStr);
+        }
+
+        // Get quantity
+        let quantity = 1;
+        if (qtyEl) {
+          quantity = parseInt(qtyEl.value || qtyEl.textContent) || 1;
+        }
+
+        // Get product URL
+        let productUrl = window.location.href;
+        const linkEl = item.querySelector('a[href*="product"], a[href*="/p"]');
+        if (linkEl?.href) {
+          productUrl = linkEl.href;
+        } else if (nameEl?.href) {
+          productUrl = nameEl.href;
+        }
 
         items.push({
-          name: nameEl.textContent?.trim(),
-          price: priceMatch ? parseFloat(priceMatch[0].replace(',', '')) : null,
-          currency: 'USD',
+          name,
+          price,
+          currency: detectedCurrency,
           imageUrl: imageEl?.src,
-          quantity: parseInt(qtyEl?.value || qtyEl?.textContent) || 1,
-          productUrl: nameEl.href || window.location.href
+          quantity,
+          productUrl
         });
       }
     });
 
+    console.log('ShopSmart scraped cart:', items);
     return items;
   }
 

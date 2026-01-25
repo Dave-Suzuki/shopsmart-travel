@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, DollarSign, LayoutList, LayoutGrid, ShoppingCart, Search } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, DollarSign, LayoutList, LayoutGrid, ShoppingCart, Search, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTrips } from '../hooks/useTrips';
 import { useShoppingList } from '../hooks/useShoppingList';
@@ -26,12 +26,13 @@ export function TripDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { trips } = useTrips(user?.uid || null);
-  const { items, loading, generateItemId, addItem, updateItem, deleteItem, togglePurchased } = useShoppingList(tripId || null);
+  const { items, loading, generateItemId, addItem, updateItem, deleteItem, togglePurchased, saveForLater } = useShoppingList(tripId || null);
   const { rates } = useExchangeRate();
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [filters, setFilters] = useState<ItemFilters>({ status: 'all' });
   const [viewMode, setViewMode] = useState<'list' | 'tile'>('tile');
   const [sortBy, setSortBy] = useState<SortOption>('date-newest');
+  const [showSavedForLater, setShowSavedForLater] = useState(false);
 
   // Deep linking state for AddShoppingItem modal
   const [deepLinkModalOpen, setDeepLinkModalOpen] = useState(false);
@@ -85,9 +86,13 @@ export function TripDetailPage() {
     return Array.from(brands).sort();
   }, [items]);
 
+  // Separate active items from saved-for-later items
+  const activeItems = useMemo(() => items.filter(item => !item.savedForLater), [items]);
+  const savedForLaterItems = useMemo(() => items.filter(item => item.savedForLater), [items]);
+
   const filteredAndSortedItems = useMemo(() => {
-    // Filter items
-    let filtered = items.filter(item => {
+    // Filter active items (not saved for later)
+    let filtered = activeItems.filter(item => {
       // Status filter
       if (filters.status === 'purchased' && !item.purchased) return false;
       if (filters.status === 'pending' && item.purchased) return false;
@@ -135,7 +140,7 @@ export function TripDetailPage() {
     });
 
     return sorted;
-  }, [items, filters, sortBy]);
+  }, [activeItems, filters, sortBy]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -168,7 +173,8 @@ export function TripDetailPage() {
     );
   }
 
-  const totalSpent = items.reduce((sum, item) => {
+  // Only count active items (not saved for later) toward budget
+  const totalSpent = activeItems.reduce((sum, item) => {
     // Convert item price to budget currency
     const itemPrice = item.currency === trip.budgetCurrency
       ? item.price
@@ -177,8 +183,8 @@ export function TripDetailPage() {
     return sum + (itemPrice * item.quantity);
   }, 0);
 
-  const purchasedCount = items.filter((item) => item.purchased).length;
-  const totalItems = items.length;
+  const purchasedCount = activeItems.filter((item) => item.purchased).length;
+  const totalItems = activeItems.length;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -238,7 +244,7 @@ export function TripDetailPage() {
       </div>
 
       {/* Shopping Summary */}
-      <ShoppingSummary items={items} budgetCurrency={trip.budgetCurrency} />
+      <ShoppingSummary items={activeItems} budgetCurrency={trip.budgetCurrency} />
 
       {/* Shopping List */}
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -321,7 +327,7 @@ export function TripDetailPage() {
           ) : (
             <ShoppingListItemTileSkeletonGrid count={6} />
           )
-        ) : items.length === 0 ? (
+        ) : activeItems.length === 0 && savedForLaterItems.length === 0 ? (
           <EmptyState
             icon={ShoppingCart}
             title="Your shopping list is empty"
@@ -335,6 +341,12 @@ export function TripDetailPage() {
               tripCategories={trip.categories}
             />
           </EmptyState>
+        ) : activeItems.length === 0 && savedForLaterItems.length > 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Bookmark className="w-12 h-12 mx-auto mb-3 text-amber-400" />
+            <p className="text-lg font-medium">All items are saved for later</p>
+            <p className="text-sm mt-1">Expand the section below to view them</p>
+          </div>
         ) : filteredAndSortedItems.length === 0 ? (
           <EmptyState
             icon={Search}
@@ -353,6 +365,7 @@ export function TripDetailPage() {
                 onUpdateItem={updateItem}
                 onDelete={deleteItem}
                 onEdit={setEditingItem}
+                onSaveForLater={saveForLater}
                 tripLocations={trip.locations}
                 budgetCurrency={trip.budgetCurrency}
               />
@@ -368,10 +381,67 @@ export function TripDetailPage() {
                 onUpdateItem={updateItem}
                 onDelete={deleteItem}
                 onEdit={setEditingItem}
+                onSaveForLater={saveForLater}
                 tripLocations={trip.locations}
                 budgetCurrency={trip.budgetCurrency}
               />
             ))}
+          </div>
+        )}
+
+        {/* Saved for Later Section */}
+        {savedForLaterItems.length > 0 && (
+          <div className="mt-8 border-t border-gray-200 pt-6">
+            <button
+              onClick={() => setShowSavedForLater(!showSavedForLater)}
+              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors duration-200"
+            >
+              <Bookmark className="w-5 h-5 text-amber-500" />
+              <span className="font-semibold">Saved for Later ({savedForLaterItems.length})</span>
+              {showSavedForLater ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
+
+            {showSavedForLater && (
+              <div className="mt-4">
+                {viewMode === 'list' ? (
+                  <div className="space-y-2 sm:space-y-3">
+                    {savedForLaterItems.map((item) => (
+                      <ShoppingListItem
+                        key={item.id}
+                        item={item}
+                        onTogglePurchased={togglePurchased}
+                        onUpdateItem={updateItem}
+                        onDelete={deleteItem}
+                        onEdit={setEditingItem}
+                        onSaveForLater={saveForLater}
+                        tripLocations={trip.locations}
+                        budgetCurrency={trip.budgetCurrency}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
+                    {savedForLaterItems.map((item) => (
+                      <ShoppingListItemTile
+                        key={item.id}
+                        item={item}
+                        onTogglePurchased={togglePurchased}
+                        onUpdateItem={updateItem}
+                        onDelete={deleteItem}
+                        onEdit={setEditingItem}
+                        onSaveForLater={saveForLater}
+                        tripLocations={trip.locations}
+                        budgetCurrency={trip.budgetCurrency}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

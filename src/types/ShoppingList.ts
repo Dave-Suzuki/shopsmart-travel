@@ -13,6 +13,7 @@ export interface ShoppingListItem {
   purchaseLocation?: string;
   brand?: string; // Brand or store name
   purchased: boolean;
+  savedForLater?: boolean; // Item is saved for later, not in main list
   // Purchase tracking fields
   purchasePrice?: number; // Actual price paid
   purchaseCurrency?: string; // Currency actually paid in
@@ -52,6 +53,7 @@ export interface UpdateShoppingListItemInput {
   brand?: string;
   notes?: string;
   purchased?: boolean;
+  savedForLater?: boolean;
   // Purchase tracking fields
   purchasePrice?: number;
   purchaseCurrency?: string;

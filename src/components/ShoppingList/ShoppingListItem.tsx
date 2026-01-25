@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Tag, Edit, MapPin, DollarSign, ExternalLink } from 'lucide-react';
+import { Trash2, Tag, Edit, MapPin, DollarSign, ExternalLink, Bookmark, RotateCcw } from 'lucide-react';
 import type { ShoppingListItem as Item, UpdateShoppingListItemInput } from '../../types/ShoppingList';
 import type { TripLocation } from '../../types/Trip';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
@@ -15,11 +15,12 @@ interface ShoppingListItemProps {
   onUpdateItem: (itemId: string, updates: UpdateShoppingListItemInput) => Promise<void>;
   onDelete: (itemId: string) => Promise<void>;
   onEdit: (item: Item) => void;
+  onSaveForLater: (itemId: string, savedForLater: boolean) => Promise<void>;
   tripLocations?: TripLocation[];
   budgetCurrency: string;
 }
 
-export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDelete, onEdit, tripLocations = [], budgetCurrency }: ShoppingListItemProps) {
+export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDelete, onEdit, onSaveForLater, tripLocations = [], budgetCurrency }: ShoppingListItemProps) {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
@@ -45,6 +46,14 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
       } catch (error) {
         showError('Failed to delete item');
       }
+    }
+  };
+
+  const handleSaveForLater = async () => {
+    try {
+      await onSaveForLater(item.id, !item.savedForLater);
+    } catch (error) {
+      showError('Failed to update item');
     }
   };
 
@@ -120,6 +129,17 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
                 title="Edit item"
               >
                 <Edit className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleSaveForLater}
+                className={`p-1.5 rounded-lg transition-colors duration-200 ${
+                  item.savedForLater
+                    ? 'text-green-500 hover:text-green-700 hover:bg-green-50'
+                    : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
+                }`}
+                title={item.savedForLater ? 'Restore to list' : 'Save for later'}
+              >
+                {item.savedForLater ? <RotateCcw className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
               </button>
               <button
                 onClick={handleDelete}

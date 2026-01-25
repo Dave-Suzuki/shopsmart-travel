@@ -56,6 +56,13 @@ document.addEventListener('DOMContentLoaded', init);
 async function init() {
   console.log('ShopSmart popup: Initializing...');
 
+  // Display version from manifest
+  const manifest = chrome.runtime.getManifest();
+  const versionBadge = document.getElementById('versionBadge');
+  if (versionBadge) {
+    versionBadge.textContent = `v${manifest.version}`;
+  }
+
   // Get DOM elements
   const notConnected = document.getElementById('notConnected');
   const connectedSection = document.getElementById('connectedSection');
