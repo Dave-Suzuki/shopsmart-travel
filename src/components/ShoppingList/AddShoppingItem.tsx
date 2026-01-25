@@ -81,10 +81,13 @@ export function AddShoppingItem({
   // Also auto-fetch missing data if we have a productUrl but missing critical fields
   useEffect(() => {
     if (initialData) {
-      // Convert imageUrl to HTTPS
+      // Convert imageUrl to HTTPS and validate
+      const rawImageUrl = initialData.imageUrl?.trim();
+      const imageUrl = rawImageUrl && rawImageUrl.startsWith('http') ? toHttps(rawImageUrl) : '';
+
       const sanitizedData = {
         ...initialData,
-        imageUrl: toHttps(initialData.imageUrl),
+        imageUrl,
       };
       setFormData(getInitialFormData(sanitizedData));
 
@@ -482,9 +485,9 @@ export function AddShoppingItem({
                       src={toHttps(formData.imageUrl)}
                       alt="Product preview"
                       className="w-full h-48 object-cover rounded-lg border border-gray-300"
-                      onError={(e) => {
-                        // Hide image if it fails to load
-                        e.currentTarget.style.display = 'none';
+                      onError={() => {
+                        // Clear imageUrl if it fails to load so user can upload manually
+                        setFormData(prev => ({ ...prev, imageUrl: '' }));
                       }}
                     />
                     <button
