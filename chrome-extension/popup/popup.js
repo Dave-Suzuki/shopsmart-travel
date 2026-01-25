@@ -4,6 +4,22 @@
 
 // SHOPSMART_URL is defined in auth.js and exposed via window.SHOPSMART_URL
 
+/**
+ * Helper to open or reuse existing ShopSmart tab
+ */
+async function openOrReuseTab(url) {
+  const baseUrl = window.SHOPSMART_URL || 'https://shopsmart-800cb.web.app';
+  const tabs = await chrome.tabs.query({ url: `${baseUrl}/*` });
+
+  if (tabs.length > 0) {
+    const existingTab = tabs[0];
+    await chrome.tabs.update(existingTab.id, { url, active: true });
+    await chrome.windows.update(existingTab.windowId, { focused: true });
+  } else {
+    chrome.tabs.create({ url });
+  }
+}
+
 // DOM elements - will be set after DOM loads
 let notConnected;
 let connectedSection;
@@ -357,9 +373,9 @@ async function handleAddItem() {
 
     const itemData = btoa(JSON.stringify(response.product));
     const url = `${window.SHOPSMART_URL}/trip/${tripId}?addItem=true&itemData=${encodeURIComponent(itemData)}`;
-    chrome.tabs.create({ url });
+    await openOrReuseTab(url);
 
-    showStatus('Opening ShopSmart...', 'success');
+    showStatus('Adding to ShopSmart...', 'success');
   } catch (error) {
     console.error('Error adding item:', error);
     showStatus(error.message || 'Failed to add item', 'error');
@@ -394,7 +410,7 @@ async function handleImportCart() {
 
     const itemsData = btoa(JSON.stringify(response.items));
     const url = `${window.SHOPSMART_URL}/trip/${tripId}/import?items=${encodeURIComponent(itemsData)}`;
-    chrome.tabs.create({ url });
+    await openOrReuseTab(url);
 
     showStatus(`Importing ${response.items.length} items...`, 'success');
   } catch (error) {

@@ -6,6 +6,21 @@
 const SHOPSMART_URL = 'https://shopsmart-800cb.web.app';
 
 /**
+ * Helper to open or reuse existing ShopSmart tab
+ */
+async function openOrReuseTab(url) {
+  const tabs = await chrome.tabs.query({ url: `${SHOPSMART_URL}/*` });
+
+  if (tabs.length > 0) {
+    const existingTab = tabs[0];
+    await chrome.tabs.update(existingTab.id, { url, active: true });
+    await chrome.windows.update(existingTab.windowId, { focused: true });
+  } else {
+    chrome.tabs.create({ url });
+  }
+}
+
+/**
  * Listen for messages from content scripts and popup
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -59,6 +74,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (request.action === 'openShopSmart') {
+    // Open or reuse ShopSmart tab (called from content script)
+    openOrReuseTab(request.url).then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
 });
 
 /**
@@ -75,7 +98,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
 
     // Open ShopSmart app so user can log in
-    chrome.tabs.create({ url: SHOPSMART_URL });
+    openOrReuseTab(SHOPSMART_URL);
   }
 });
 
@@ -146,15 +169,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       if (response && response.product && response.product.name) {
         const itemData = btoa(JSON.stringify(response.product));
         const url = `${SHOPSMART_URL}/trip/${tripId}?addItem=true&itemData=${encodeURIComponent(itemData)}`;
-        chrome.tabs.create({ url });
+        openOrReuseTab(url);
       } else {
         // Open ShopSmart without product data
-        chrome.tabs.create({ url: `${SHOPSMART_URL}/trip/${tripId}?addItem=true` });
+        openOrReuseTab(`${SHOPSMART_URL}/trip/${tripId}?addItem=true`);
       }
     } catch (error) {
       console.error('Error scraping product:', error);
       // Open ShopSmart without product data
-      chrome.tabs.create({ url: `${SHOPSMART_URL}/trip/${tripId}?addItem=true` });
+      openOrReuseTab(`${SHOPSMART_URL}/trip/${tripId}?addItem=true`);
     }
   }
 });

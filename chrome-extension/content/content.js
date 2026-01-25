@@ -153,9 +153,9 @@
       // Encode product data
       const itemData = btoa(JSON.stringify(product));
 
-      // Open ShopSmart with deep link
+      // Open ShopSmart with deep link (reuse existing tab)
       const url = `${SHOPSMART_URL}/trip/${tripId}?addItem=true&itemData=${encodeURIComponent(itemData)}`;
-      window.open(url, '_blank');
+      chrome.runtime.sendMessage({ action: 'openShopSmart', url });
 
       // Show success
       showNotification('Opening ShopSmart...', 'success');
@@ -208,9 +208,9 @@
       // Encode items data
       const itemsData = btoa(JSON.stringify(items));
 
-      // Open ShopSmart bulk import page
+      // Open ShopSmart bulk import page (reuse existing tab)
       const url = `${SHOPSMART_URL}/trip/${tripId}/import?items=${encodeURIComponent(itemsData)}`;
-      window.open(url, '_blank');
+      chrome.runtime.sendMessage({ action: 'openShopSmart', url });
 
       showNotification(`Opening ShopSmart with ${items.length} item${items.length !== 1 ? 's' : ''}...`, 'success');
     } catch (error) {
