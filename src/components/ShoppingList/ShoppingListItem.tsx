@@ -5,6 +5,7 @@ import type { TripLocation } from '../../types/Trip';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { formatCurrency } from '../../utils/currency';
 import { toHttps } from '../../utils/url';
+import { showError } from '../../utils/toast';
 import { ImageModal } from '../Shared/ImageModal';
 import { PurchaseRecordModal } from './PurchaseRecordModal';
 
@@ -33,7 +34,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
         await onTogglePurchased(item.id, false);
       }
     } catch (error) {
-      alert('Failed to update item');
+      showError('Failed to update item');
     }
   };
 
@@ -42,7 +43,7 @@ export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDele
       try {
         await onDelete(item.id);
       } catch (error) {
-        alert('Failed to delete item');
+        showError('Failed to delete item');
       }
     }
   };

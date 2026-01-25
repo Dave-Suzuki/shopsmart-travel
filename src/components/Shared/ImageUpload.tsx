@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { showError } from '../../utils/toast';
 
 interface ImageUploadProps {
   currentImageUrl?: string;
@@ -20,14 +21,14 @@ export function ImageUpload({ currentImageUrl, onImageSelected, onImageRemoved }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      showError('Please select an image file');
       return;
     }
 
     // Validate file size (5MB max)
     const maxSize = 5 * 1024 * 1024; // 5MB
     if (file.size > maxSize) {
-      alert('Image size must be less than 5MB');
+      showError('Image size must be less than 5MB');
       return;
     }
 

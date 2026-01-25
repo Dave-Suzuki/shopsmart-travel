@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { getRedirectState } from '../../utils/authStorage';
 import { debugLogger, type LogEntry } from '../../utils/debugLogger';
+import { showSuccess, showError } from '../../utils/toast';
 
 interface LoginButtonProps {
   isExtensionLogin?: boolean;
@@ -105,7 +106,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
       // Fallback: Copy to clipboard
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(logText);
-        alert('✅ Logs copied to clipboard! Paste in a message to share.');
+        showSuccess('Logs copied to clipboard! Paste in a message to share.');
         return;
       }
 
@@ -119,10 +120,10 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      alert('✅ Log file downloaded!');
+      showSuccess('Log file downloaded!');
     } catch (error) {
       console.error('Failed to share logs:', error);
-      alert('❌ Failed to share logs. See console for details.');
+      showError('Failed to share logs. See console for details.');
     }
   };
 

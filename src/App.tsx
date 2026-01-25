@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { useAuth } from './hooks/useAuth';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useExtensionAuth } from './hooks/useExtensionAuth';
+import { OnboardingProvider } from './contexts/OnboardingContext';
 import { LoginButton } from './components/Auth/LoginButton';
 import { Header } from './components/Shared/Header';
 import { LandingPage } from './pages/LandingPage';
@@ -10,22 +12,26 @@ import { TripDetailPage } from './pages/TripDetailPage';
 import { BulkImportPage } from './pages/BulkImportPage';
 import { InstallPrompt } from './components/Shared/InstallPrompt';
 import { ReloadPrompt } from './components/Shared/ReloadPrompt';
+import { WelcomeModal } from './components/Onboarding/WelcomeModal';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public landing page */}
-        <Route path="/" element={<LandingPage />} />
+    <>
+      <Toaster position="bottom-right" richColors closeButton />
+      <BrowserRouter>
+        <Routes>
+          {/* Public landing page */}
+          <Route path="/" element={<LandingPage />} />
 
-        {/* Authenticated app routes */}
-        <Route path="/app/*" element={<AuthenticatedApp />} />
+          {/* Authenticated app routes */}
+          <Route path="/app/*" element={<AuthenticatedApp />} />
 
-        {/* Legacy routes - redirect to /app */}
-        <Route path="/trip/:tripId" element={<LegacyTripRedirect />} />
-        <Route path="/trip/:tripId/import" element={<LegacyImportRedirect />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Legacy routes - redirect to /app */}
+          <Route path="/trip/:tripId" element={<LegacyTripRedirect />} />
+          <Route path="/trip/:tripId/import" element={<LegacyImportRedirect />} />
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }
 
@@ -80,19 +86,22 @@ function AuthenticatedApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-      <main className="container mx-auto px-4 py-8">
-        <Routes>
-          <Route path="/" element={<TripsPage />} />
-          <Route path="/trip/:tripId" element={<TripDetailPage />} />
-          <Route path="/trip/:tripId/import" element={<BulkImportPage />} />
-          <Route path="*" element={<Navigate to="/app" replace />} />
-        </Routes>
-      </main>
-      <InstallPrompt />
-      <ReloadPrompt />
-    </div>
+    <OnboardingProvider>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <Routes>
+            <Route path="/" element={<TripsPage />} />
+            <Route path="/trip/:tripId" element={<TripDetailPage />} />
+            <Route path="/trip/:tripId/import" element={<BulkImportPage />} />
+            <Route path="*" element={<Navigate to="/app" replace />} />
+          </Routes>
+        </main>
+        <InstallPrompt />
+        <ReloadPrompt />
+        <WelcomeModal />
+      </div>
+    </OnboardingProvider>
   );
 }
 

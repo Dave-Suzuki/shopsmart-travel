@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import type { CreateTripInput } from '../../types/Trip';
 import { CATEGORIES } from '../../constants/categories';
+import { showError } from '../../utils/toast';
 
 interface CreateTripProps {
   onCreateTrip: (trip: CreateTripInput) => Promise<void>;
@@ -62,7 +63,7 @@ export function CreateTrip({ onCreateTrip }: CreateTripProps) {
 
     // Validate dates
     if (formData.endDate < formData.startDate) {
-      alert('End date must be after start date');
+      showError('End date must be after start date');
       return;
     }
 
@@ -84,7 +85,7 @@ export function CreateTrip({ onCreateTrip }: CreateTripProps) {
       setNewCategory({ value: '', label: '', icon: '📦' });
       setIsOpen(false);
     } catch (error) {
-      alert('Failed to create trip');
+      showError('Failed to create trip');
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { X, DollarSign, Calendar, MapPin } from 'lucide-react';
 import type { ShoppingListItem, UpdateShoppingListItemInput } from '../../types/ShoppingList';
 import type { TripLocation } from '../../types/Trip';
+import { showError } from '../../utils/toast';
 
 interface PurchaseRecordModalProps {
   item: ShoppingListItem;
@@ -63,7 +64,7 @@ export function PurchaseRecordModal({
       await onSave(item.id, updates);
       onClose();
     } catch (error) {
-      alert('Failed to update purchase details');
+      showError('Failed to update purchase details');
     } finally {
       setLoading(false);
     }
@@ -75,7 +76,7 @@ export function PurchaseRecordModal({
       await onSave(item.id, { purchased: true });
       onClose();
     } catch (error) {
-      alert('Failed to mark item as purchased');
+      showError('Failed to mark item as purchased');
     } finally {
       setLoading(false);
     }

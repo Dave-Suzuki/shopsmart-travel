@@ -6,6 +6,7 @@ import { CATEGORIES } from '../../constants/categories';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { ImageUpload } from '../Shared/ImageUpload';
 import { useImageUpload } from '../../hooks/useImageUpload';
+import { showError } from '../../utils/toast';
 
 interface EditShoppingItemProps {
   item: ShoppingListItem;
@@ -88,7 +89,7 @@ export function EditShoppingItem({ item, isOpen, onClose, onUpdateItem, tripLoca
       await onUpdateItem(item.id, updates);
       onClose();
     } catch (error) {
-      alert('Failed to update item');
+      showError('Failed to update item');
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, DollarSign, Trash2, Edit, Share2, Users } from 'lucide-react';
 import type { Trip } from '../../types/Trip';
+import { showError } from '../../utils/toast';
 
 interface TripCardProps {
   trip: Trip;
@@ -28,7 +29,7 @@ export function TripCard({ trip, onDelete, onEdit, onShare, currentUserId }: Tri
       try {
         await onDelete(trip.id);
       } catch (error) {
-        alert('Failed to delete trip');
+        showError('Failed to delete trip');
       }
     }
   };

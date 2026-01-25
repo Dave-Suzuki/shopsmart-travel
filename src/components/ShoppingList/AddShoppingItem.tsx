@@ -8,6 +8,7 @@ import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { ImageUpload } from '../Shared/ImageUpload';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { toHttps } from '../../utils/url';
+import { showError } from '../../utils/toast';
 import { URLFetchButton } from '../Item/AddItem/URLFetchButton';
 
 // Data structure for pre-filling form from external sources (Chrome extension, deep links)
@@ -196,7 +197,7 @@ export function AddShoppingItem({
     try {
       // Validate form data
       if (!formData.name.trim()) {
-        alert('Please enter an item name');
+        showError('Please enter an item name');
         setLoading(false);
         return;
       }
@@ -236,7 +237,7 @@ export function AddShoppingItem({
     } catch (error: any) {
       console.error('Error adding item:', error);
       const errorMessage = error?.message || 'Failed to add item. Please try again.';
-      alert(errorMessage);
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }

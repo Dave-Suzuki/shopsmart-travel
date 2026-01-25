@@ -3,6 +3,7 @@ import { X, UserPlus, Mail, Users, Trash2 } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import type { Trip } from '../../types/Trip';
+import { showError } from '../../utils/toast';
 
 interface ShareTripProps {
   trip: Trip;
@@ -118,7 +119,7 @@ export function ShareTrip({ trip, isOpen, onClose, onShareTrip, onRemoveCollabor
 
   const handleRemoveCollaborator = async (userId: string) => {
     if (userId === trip.createdBy) {
-      alert('Cannot remove the trip creator.');
+      showError('Cannot remove the trip creator.');
       return;
     }
 
@@ -140,7 +141,7 @@ export function ShareTrip({ trip, isOpen, onClose, onShareTrip, onRemoveCollabor
         onClose();
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to remove collaborator.');
+      showError(err.message || 'Failed to remove collaborator.');
     }
   };
 

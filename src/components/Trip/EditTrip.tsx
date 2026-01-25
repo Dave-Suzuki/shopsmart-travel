@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import type { Trip, UpdateTripInput } from '../../types/Trip';
 import { CATEGORIES } from '../../constants/categories';
+import { showError } from '../../utils/toast';
 
 interface EditTripProps {
   trip: Trip;
@@ -64,7 +65,7 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
 
     // Validate dates
     if (formData.endDate < formData.startDate) {
-      alert('End date must be after start date');
+      showError('End date must be after start date');
       return;
     }
 
@@ -74,7 +75,7 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
       await onUpdateTrip(trip.id, formData);
       onClose();
     } catch (error) {
-      alert('Failed to update trip');
+      showError('Failed to update trip');
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, DollarSign, LayoutList, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, DollarSign, LayoutList, LayoutGrid, ShoppingCart, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTrips } from '../hooks/useTrips';
 import { useShoppingList } from '../hooks/useShoppingList';
@@ -9,8 +9,12 @@ import { convertCurrency } from '../utils/currency';
 import { AddShoppingItem, type ItemInitialData } from '../components/ShoppingList/AddShoppingItem';
 import { ShoppingListItem } from '../components/ShoppingList/ShoppingListItem';
 import { ShoppingListItemTile } from '../components/ShoppingList/ShoppingListItemTile';
+import { ShoppingListItemSkeletonList } from '../components/ShoppingList/ShoppingListItemSkeleton';
+import { ShoppingListItemTileSkeletonGrid } from '../components/ShoppingList/ShoppingListItemTileSkeleton';
 import { EditShoppingItem } from '../components/ShoppingList/EditShoppingItem';
 import { ShoppingSummary } from '../components/ShoppingList/ShoppingSummary';
+import { EmptyState } from '../components/Shared/EmptyState';
+import { OnboardingTooltip } from '../components/Shared/OnboardingTooltip';
 import { ItemFilter, type ItemFilters } from '../components/Item/ItemFilter';
 import { ItemSort, type SortOption } from '../components/Item/ItemSort';
 import { ExchangeRateIndicator } from '../components/Currency/ExchangeRateIndicator';
@@ -289,13 +293,20 @@ export function TripDetailPage() {
               tripCategories={trip.categories}
               availableBrands={availableBrands}
             />
-            <AddShoppingItem
-              onAddItem={addItem}
-              generateItemId={generateItemId}
-              defaultCurrency={trip.budgetCurrency}
-              tripLocations={trip.locations}
-              tripCategories={trip.categories}
-            />
+            <OnboardingTooltip
+              tipId="add-item"
+              message="Add items you want to buy during your trip. Include prices to track your budget!"
+              position="left"
+              showCondition={items.length === 0 && !loading}
+            >
+              <AddShoppingItem
+                onAddItem={addItem}
+                generateItemId={generateItemId}
+                defaultCurrency={trip.budgetCurrency}
+                tripLocations={trip.locations}
+                tripCategories={trip.categories}
+              />
+            </OnboardingTooltip>
           </div>
         </div>
 
@@ -305,25 +316,33 @@ export function TripDetailPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-            <p className="text-gray-600">Loading items...</p>
-          </div>
+          viewMode === 'list' ? (
+            <ShoppingListItemSkeletonList count={5} />
+          ) : (
+            <ShoppingListItemTileSkeletonGrid count={6} />
+          )
         ) : items.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-600 mb-4">No items yet</p>
-            <AddShoppingItem onAddItem={addItem} generateItemId={generateItemId} defaultCurrency={trip.budgetCurrency} />
-          </div>
+          <EmptyState
+            icon={ShoppingCart}
+            title="Your shopping list is empty"
+            description="Add items you want to buy during your trip"
+          >
+            <AddShoppingItem
+              onAddItem={addItem}
+              generateItemId={generateItemId}
+              defaultCurrency={trip.budgetCurrency}
+              tripLocations={trip.locations}
+              tripCategories={trip.categories}
+            />
+          </EmptyState>
         ) : filteredAndSortedItems.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-600 mb-4">No items match the current filters</p>
-            <button
-              onClick={() => setFilters({ status: 'all' })}
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Clear filters
-            </button>
-          </div>
+          <EmptyState
+            icon={Search}
+            title="No items match your filters"
+            description="Try adjusting your filters to see more items"
+            actionLabel="Clear Filters"
+            onAction={() => setFilters({ status: 'all' })}
+          />
         ) : viewMode === 'list' ? (
           <div className="space-y-2 sm:space-y-3">
             {filteredAndSortedItems.map((item) => (
@@ -340,7 +359,7 @@ export function TripDetailPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
             {filteredAndSortedItems.map((item) => (
               <ShoppingListItemTile
                 key={item.id}

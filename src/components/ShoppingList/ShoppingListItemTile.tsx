@@ -5,6 +5,7 @@ import type { TripLocation } from '../../types/Trip';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { formatCurrency } from '../../utils/currency';
 import { toHttps } from '../../utils/url';
+import { showError } from '../../utils/toast';
 import { ImageModal } from '../Shared/ImageModal';
 import { PurchaseRecordModal } from './PurchaseRecordModal';
 
@@ -30,7 +31,7 @@ export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, on
         await onTogglePurchased(item.id, false);
       }
     } catch (error) {
-      alert('Failed to update item');
+      showError('Failed to update item');
     }
   };
 
@@ -39,7 +40,7 @@ export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, on
       try {
         await onDelete(item.id);
       } catch (error) {
-        alert('Failed to delete item');
+        showError('Failed to delete item');
       }
     }
   };
@@ -135,9 +136,9 @@ export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, on
           )}
         </div>
 
-        {/* Description - hidden on mobile */}
+        {/* Description - hidden on mobile, single line on desktop */}
         {item.description && (
-          <p className="hidden sm:block text-sm text-gray-600 mb-3 line-clamp-2">
+          <p className="hidden sm:block text-xs text-gray-600 mb-3 line-clamp-1">
             {item.description}
           </p>
         )}
