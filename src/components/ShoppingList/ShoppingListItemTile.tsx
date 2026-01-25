@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Tag, Edit, MapPin, DollarSign, ExternalLink } from 'lucide-react';
+import { Trash2, Tag, Edit, DollarSign, ExternalLink } from 'lucide-react';
 import type { ShoppingListItem as Item, UpdateShoppingListItemInput } from '../../types/ShoppingList';
 import type { TripLocation } from '../../types/Trip';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
@@ -118,47 +118,17 @@ export function ShoppingListItemTile({ item, onTogglePurchased, onUpdateItem, on
           <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Qty: {item.quantity}</div>
         </div>
 
-        {/* Meta Info - hidden on mobile to save space */}
-        <div className="hidden sm:flex flex-wrap gap-2 mb-3 text-xs">
-          {item.category && (
-            <div className="flex items-center gap-1 text-gray-600">
-              <Tag className="w-3 h-3" />
-              <span>{item.category}</span>
-            </div>
-          )}
-          {item.purchaseLocation && (
-            <div className="flex items-center gap-1 text-gray-600">
-              <MapPin className="w-3 h-3" />
-              <span>
-                {item.purchaseLocation === 'Online' ? '🌐 ' : ''}{item.purchaseLocation}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Description - hidden on mobile, single line on desktop */}
-        {item.description && (
-          <p className="hidden sm:block text-xs text-gray-600 mb-3 line-clamp-1">
-            {item.description}
-          </p>
-        )}
-
-        {/* Product URL - hidden on mobile */}
+        {/* Product URL */}
         {item.productUrl && (
           <a
             href={item.productUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 hover:underline mb-3"
+            className="inline-flex items-center gap-1 text-[10px] sm:text-xs text-purple-600 hover:text-purple-700 hover:underline"
           >
-            <ExternalLink className="w-3 h-3" />
+            <ExternalLink className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             <span>View product</span>
           </a>
-        )}
-
-        {/* Notes - hidden on mobile */}
-        {item.notes && (
-          <p className="hidden sm:block text-xs text-gray-500 italic mb-3 line-clamp-2">{item.notes}</p>
         )}
 
         {/* Action Buttons */}
