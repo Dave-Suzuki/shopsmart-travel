@@ -92,9 +92,16 @@
           if (productData.description) product.description = productData.description;
           if (productData.sku) product.sku = productData.sku;
 
-          // Image handling
+          // Image handling - handle string, array, or ImageObject
           if (productData.image) {
-            product.imageUrl = Array.isArray(productData.image) ? productData.image[0] : productData.image;
+            let img = Array.isArray(productData.image) ? productData.image[0] : productData.image;
+            // Handle ImageObject type
+            if (typeof img === 'object' && img !== null) {
+              img = img.url || img.contentUrl || img['@id'] || null;
+            }
+            if (typeof img === 'string') {
+              product.imageUrl = img;
+            }
           }
 
           // Price from offers
