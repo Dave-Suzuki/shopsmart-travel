@@ -153,64 +153,128 @@
                       document.querySelector('.brand, [class*="brand-name"]')?.textContent?.trim();
     }
 
-    // Fallback: image from Open Graph or main product image
-    if (!product.imageUrl) {
-      // Try og:image first
-      const ogImage = document.querySelector('meta[property="og:image"]')?.content;
-      if (ogImage) {
-        product.imageUrl = ogImage;
-      } else {
-        // Try various product image selectors
-        const imgSelectors = [
-          '.product-image img',
-          '.product-media img',
-          '[class*="gallery"] img',
-          '[class*="product"] img[class*="main"]',
-          '[class*="product"] img[class*="primary"]',
-          '.pdp-image img',
-          '.product-detail img',
-          'img[itemprop="image"]',
-          '[data-zoom-image]',
-          '.fotorama img'
-        ];
+    // Helper to extract image URL from various attributes
+    function getImageSrc(img) {
+      if (!img) return null;
+      const src = img.src ||
+                  img.currentSrc ||
+                  img.getAttribute('data-src') ||
+                  img.getAttribute('data-lazy-src') ||
+                  img.getAttribute('data-original') ||
+                  img.getAttribute('data-zoom-image') ||
+                  img.getAttribute('data-image') ||
+                  img.getAttribute('data-srcset')?.split(',')[0]?.trim()?.split(' ')[0];
+      // Also check srcset
+      if (!src && img.srcset) {
+        const firstSrc = img.srcset.split(',')[0]?.trim()?.split(' ')[0];
+        if (firstSrc) return firstSrc;
+      }
+      return (src && !src.startsWith('data:')) ? src : null;
+    }
 
-        for (const selector of imgSelectors) {
-          const img = document.querySelector(selector);
-          if (img) {
-            // Check various image source attributes (handles lazy loading)
-            const src = img.src ||
-                       img.getAttribute('data-src') ||
-                       img.getAttribute('data-lazy-src') ||
-                       img.getAttribute('data-original') ||
-                       img.getAttribute('data-zoom-image') ||
-                       img.currentSrc;
-            if (src && !src.startsWith('data:')) {
-              product.imageUrl = src;
-              break;
-            }
+    // Fallback: image from Open Graph or other meta tags
+    if (!product.imageUrl) {
+      product.imageUrl = document.querySelector('meta[property="og:image"]')?.content ||
+                         document.querySelector('meta[property="og:image:url"]')?.content ||
+                         document.querySelector('meta[name="twitter:image"]')?.content ||
+                         document.querySelector('link[rel="image_src"]')?.href;
+    }
+
+    // Try various product image selectors
+    if (!product.imageUrl) {
+      const imgSelectors = [
+        // Common e-commerce patterns
+        '.product-image img',
+        '.product-media img',
+        '.product-gallery img',
+        '.product-photo img',
+        '.product-picture img',
+        '[class*="gallery"] img',
+        '[class*="product"] img[class*="main"]',
+        '[class*="product"] img[class*="primary"]',
+        '[class*="product"] img:first-of-type',
+        '.pdp-image img',
+        '.product-detail img',
+        'img[itemprop="image"]',
+        '[data-zoom-image]',
+        '.fotorama img',
+        // Picture elements
+        'picture.product-image source',
+        'picture[class*="product"] source',
+        'picture source[type="image/webp"]',
+        'picture source',
+        // Specific platforms
+        '.woocommerce-product-gallery img',
+        '.shopify-section img',
+        '#product-image img',
+        '#main-image img',
+        '.main-image img',
+        // French e-commerce
+        '.product-img img',
+        '.visuel-produit img',
+        '.image-produit img',
+        '[class*="slider"] img:first-of-type'
+      ];
+
+      for (const selector of imgSelectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          // Handle both img and source elements
+          const src = el.tagName === 'SOURCE'
+            ? (el.srcset?.split(',')[0]?.trim()?.split(' ')[0] || el.src)
+            : getImageSrc(el);
+          if (src) {
+            product.imageUrl = src;
+            break;
           }
         }
       }
     }
 
-    // Last resort: find largest image on page
+    // Try to find image in picture element
     if (!product.imageUrl) {
-      const images = Array.from(document.querySelectorAll('img'));
-      let largestImg = null;
-      let largestArea = 0;
-
-      for (const img of images) {
-        const area = (img.naturalWidth || img.width) * (img.naturalHeight || img.height);
-        if (area > largestArea && area > 10000) { // Min 100x100
-          const src = img.src || img.getAttribute('data-src');
-          if (src && !src.startsWith('data:') && !src.includes('logo') && !src.includes('icon')) {
-            largestArea = area;
-            largestImg = src;
+      const pictures = document.querySelectorAll('picture');
+      for (const picture of pictures) {
+        const parent = picture.closest('[class*="product"], [class*="gallery"], main, article');
+        if (parent) {
+          const source = picture.querySelector('source');
+          const img = picture.querySelector('img');
+          const src = source?.srcset?.split(',')[0]?.trim()?.split(' ')[0] || getImageSrc(img);
+          if (src) {
+            product.imageUrl = src;
+            break;
           }
         }
       }
-      if (largestImg) {
-        product.imageUrl = largestImg;
+    }
+
+    // Last resort: find largest visible image on page
+    if (!product.imageUrl) {
+      const images = Array.from(document.querySelectorAll('img'));
+      let bestImg = null;
+      let bestScore = 0;
+
+      for (const img of images) {
+        const src = getImageSrc(img);
+        if (!src || src.includes('logo') || src.includes('icon') || src.includes('sprite')) continue;
+
+        // Calculate score based on size and position
+        const rect = img.getBoundingClientRect();
+        const area = (img.naturalWidth || img.width || rect.width) * (img.naturalHeight || img.height || rect.height);
+        const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+        const isInMainContent = img.closest('main, article, [class*="product"], [class*="content"]');
+
+        let score = area;
+        if (isVisible) score *= 2;
+        if (isInMainContent) score *= 2;
+
+        if (score > bestScore && area > 5000) {
+          bestScore = score;
+          bestImg = src;
+        }
+      }
+      if (bestImg) {
+        product.imageUrl = bestImg;
       }
     }
 
