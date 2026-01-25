@@ -155,9 +155,63 @@
 
     // Fallback: image from Open Graph or main product image
     if (!product.imageUrl) {
-      product.imageUrl = document.querySelector('meta[property="og:image"]')?.content ||
-                         document.querySelector('.product-image img, .product-media img, [class*="gallery"] img, .fotorama img')?.src ||
-                         document.querySelector('img[itemprop="image"]')?.src;
+      // Try og:image first
+      const ogImage = document.querySelector('meta[property="og:image"]')?.content;
+      if (ogImage) {
+        product.imageUrl = ogImage;
+      } else {
+        // Try various product image selectors
+        const imgSelectors = [
+          '.product-image img',
+          '.product-media img',
+          '[class*="gallery"] img',
+          '[class*="product"] img[class*="main"]',
+          '[class*="product"] img[class*="primary"]',
+          '.pdp-image img',
+          '.product-detail img',
+          'img[itemprop="image"]',
+          '[data-zoom-image]',
+          '.fotorama img'
+        ];
+
+        for (const selector of imgSelectors) {
+          const img = document.querySelector(selector);
+          if (img) {
+            // Check various image source attributes (handles lazy loading)
+            const src = img.src ||
+                       img.getAttribute('data-src') ||
+                       img.getAttribute('data-lazy-src') ||
+                       img.getAttribute('data-original') ||
+                       img.getAttribute('data-zoom-image') ||
+                       img.currentSrc;
+            if (src && !src.startsWith('data:')) {
+              product.imageUrl = src;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Last resort: find largest image on page
+    if (!product.imageUrl) {
+      const images = Array.from(document.querySelectorAll('img'));
+      let largestImg = null;
+      let largestArea = 0;
+
+      for (const img of images) {
+        const area = (img.naturalWidth || img.width) * (img.naturalHeight || img.height);
+        if (area > largestArea && area > 10000) { // Min 100x100
+          const src = img.src || img.getAttribute('data-src');
+          if (src && !src.startsWith('data:') && !src.includes('logo') && !src.includes('icon')) {
+            largestArea = area;
+            largestImg = src;
+          }
+        }
+      }
+      if (largestImg) {
+        product.imageUrl = largestImg;
+      }
     }
 
     // Fallback: price from DOM
