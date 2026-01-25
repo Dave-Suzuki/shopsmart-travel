@@ -248,7 +248,22 @@
       }
     }
 
-    // Last resort: find largest visible image on page
+    // Check for Demandware/Salesforce Commerce Cloud product images
+    if (!product.imageUrl) {
+      const images = Array.from(document.querySelectorAll('img'));
+      for (const img of images) {
+        const src = getImageSrc(img);
+        if (src && (src.includes('master-catalog') || src.includes('/images/DIS/') || src.includes('/images/hi-res/'))) {
+          // Prefer larger versions (1500 over 220)
+          if (src.includes('1500') || !src.includes('220')) {
+            product.imageUrl = src;
+            break;
+          }
+        }
+      }
+    }
+
+    // Last resort: find largest visible image on page (excluding nav/menu images)
     if (!product.imageUrl) {
       const images = Array.from(document.querySelectorAll('img'));
       let bestImg = null;
@@ -256,17 +271,24 @@
 
       for (const img of images) {
         const src = getImageSrc(img);
-        if (!src || src.includes('logo') || src.includes('icon') || src.includes('sprite')) continue;
+        if (!src) continue;
+
+        // Skip common non-product images
+        const skipPatterns = ['logo', 'icon', 'sprite', 'arrow', 'button', 'menu', 'megamenu', 'push_', 'footer', 'cookie'];
+        if (skipPatterns.some(p => src.toLowerCase().includes(p))) continue;
 
         // Calculate score based on size and position
         const rect = img.getBoundingClientRect();
         const area = (img.naturalWidth || img.width || rect.width) * (img.naturalHeight || img.height || rect.height);
         const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
-        const isInMainContent = img.closest('main, article, [class*="product"], [class*="content"]');
+        const isInMainContent = img.closest('main, article, [class*="product"], [class*="content"], [class*="pdp"], [class*="detail"]');
 
         let score = area;
         if (isVisible) score *= 2;
-        if (isInMainContent) score *= 2;
+        if (isInMainContent) score *= 3;
+
+        // Boost score for URLs that look like product images
+        if (src.includes('product') || src.includes('catalog') || src.includes('/images/')) score *= 1.5;
 
         if (score > bestScore && area > 5000) {
           bestScore = score;
