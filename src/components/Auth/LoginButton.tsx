@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { getRedirectState } from '../../utils/authStorage';
 import { debugLogger, type LogEntry } from '../../utils/debugLogger';
 import { showSuccess, showError } from '../../utils/toast';
 
@@ -10,7 +9,7 @@ interface LoginButtonProps {
 }
 
 export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
-  const { signInWithGoogle, error: authError, isProcessingRedirect, retrySignIn } = useAuth();
+  const { signInWithGoogle, error: authError, retrySignIn } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showTimeout, setShowTimeout] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -30,23 +29,16 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
     if (!isDebugMode) return;
 
     const updateDebugInfo = () => {
-      const redirectState = getRedirectState();
-      const now = Date.now();
       setDebugInfo({
-        isProcessingRedirect,
         authError,
-        redirectState,
-        age: redirectState ? now - redirectState.redirectTimestamp : null,
-        localStorage: localStorage.getItem('authRedirect'),
-        sessionStorage: sessionStorage.getItem('authRedirect'),
-        timestamp: now,
+        timestamp: Date.now(),
       });
     };
 
     updateDebugInfo();
     const interval = setInterval(updateDebugInfo, 1000);
     return () => clearInterval(interval);
-  }, [isDebugMode, isProcessingRedirect, authError]);
+  }, [isDebugMode, authError]);
 
   // Detect timeout from error message
   useEffect(() => {
@@ -64,10 +56,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
     } catch (error) {
       // Error is already logged in useAuth
     } finally {
-      // Don't reset loading if we're in redirect flow
-      if (!isProcessingRedirect) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   };
 
@@ -80,12 +69,6 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
         url: window.location.href,
         state: debugInfo,
         logs: logs,
-        localStorage: {
-          authRedirect: localStorage.getItem('authRedirect'),
-        },
-        sessionStorage: {
-          authRedirect: sessionStorage.getItem('authRedirect'),
-        },
       };
 
       const logText = JSON.stringify(debugData, null, 2);
@@ -154,20 +137,6 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
     );
   }
 
-  // Show loading message when processing redirect
-  if (isProcessingRedirect) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4">
-        <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Completing sign-in...</h2>
-          <p className="text-gray-600 mb-2">Processing your Google account</p>
-          <p className="text-xs text-gray-500">This usually takes 2-5 seconds</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4">
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
@@ -206,7 +175,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
 
         <button
           onClick={handleSignIn}
-          disabled={isLoading || isProcessingRedirect}
+          disabled={isLoading}
           className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 rounded-lg px-6 py-3 text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -243,15 +212,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
               <div className="p-3 bg-gray-900 text-green-400 rounded-lg text-xs font-mono">
                 <div className="font-bold text-yellow-400 mb-2">📊 STATE (updates every 1s)</div>
                 <div className="space-y-1">
-                  <div><span className="text-gray-400">isProcessingRedirect:</span> {String(debugInfo.isProcessingRedirect)}</div>
                   <div><span className="text-gray-400">authError:</span> {debugInfo.authError || 'null'}</div>
-                  {debugInfo.redirectState && (
-                    <>
-                      <div className="text-yellow-300 font-bold mt-2">Redirect State:</div>
-                      <div><span className="text-gray-400">age:</span> {(debugInfo.age / 1000).toFixed(1)}s</div>
-                      <div className="text-red-400 font-bold mt-2">⚠️ NOT PROCESSING!</div>
-                    </>
-                  )}
                 </div>
               </div>
             )}
