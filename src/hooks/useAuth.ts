@@ -4,9 +4,6 @@ import {
   onAuthStateChanged,
   signInWithPopup,
   signOut as firebaseSignOut,
-  browserLocalPersistence,
-  indexedDBLocalPersistence,
-  setPersistence
 } from 'firebase/auth';
 import { auth, googleProvider } from '../services/firebase';
 
@@ -18,21 +15,7 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
-    const initAuth = async () => {
-      try {
-        // Set persistence with fallback chain for iOS Safari compatibility
-        try {
-          await setPersistence(auth, indexedDBLocalPersistence);
-        } catch {
-          await setPersistence(auth, browserLocalPersistence);
-        }
-      } catch (error: any) {
-        console.error('[AUTH:ERROR] Init error:', error);
-      }
-    };
-
-    initAuth();
-
+    // Persistence is configured in firebase.ts via initializeAuth.
     // Set up auth state listener
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!mounted) return;
