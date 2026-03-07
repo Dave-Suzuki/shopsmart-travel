@@ -1,87 +1,33 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import {
   onAuthStateChanged,
   signInWithPopup,
-  getRedirectResult,
   signOut as firebaseSignOut,
   browserLocalPersistence,
   indexedDBLocalPersistence,
   setPersistence
 } from 'firebase/auth';
 import { auth, googleProvider } from '../services/firebase';
-import { clearRedirectState, getRedirectState } from '../utils/authStorage';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessingRedirect, setIsProcessingRedirect] = useState(false);
-
-  // Use ref to track processing state without causing re-renders
-  const isProcessingRedirectRef = useRef(false);
 
   useEffect(() => {
-    console.log('[AUTH:EFFECT] useEffect running');
     let mounted = true;
 
     const initAuth = async () => {
       try {
-        console.log('[AUTH:INIT] Starting initAuth function');
-
-        // Check for pending redirect state
-        const redirectState = getRedirectState();
-        const hasPendingRedirect = redirectState?.pendingRedirect;
-        const redirectAge = redirectState?.redirectTimestamp
-          ? Date.now() - redirectState.redirectTimestamp
-          : Infinity;
-        const isStaleRedirect = redirectAge > 5 * 60 * 1000; // 5 minutes
-
-        console.log('[AUTH:INIT] Redirect state:', { hasPendingRedirect, redirectAge, isStaleRedirect });
-
-        // Only clear truly stale redirects (older than 5 minutes)
-        if (hasPendingRedirect && isStaleRedirect) {
-          console.log('[AUTH:CLEANUP] Clearing stale redirect state (older than 5 minutes)');
-          clearRedirectState();
-        }
-
         // Set persistence with fallback chain for iOS Safari compatibility
         try {
           await setPersistence(auth, indexedDBLocalPersistence);
-          console.log('[AUTH:INIT] Persistence set to IndexedDB');
-        } catch (indexedDBError) {
-          console.warn('[AUTH:INIT] IndexedDB failed, using localStorage');
+        } catch {
           await setPersistence(auth, browserLocalPersistence);
         }
-
-        // Process redirect result if we have a pending (non-stale) redirect
-        if (hasPendingRedirect && !isStaleRedirect) {
-          console.log('[AUTH:REDIRECT] Processing pending redirect result...');
-          setIsProcessingRedirect(true);
-          isProcessingRedirectRef.current = true;
-        }
-
-        const result = await getRedirectResult(auth);
-        if (result) {
-          console.log('[AUTH:SUCCESS] Redirect result found:', result.user.email);
-        } else {
-          console.log('[AUTH:INIT] No redirect result (normal page load or redirect failed)');
-        }
-
-        // Clear redirect state after processing (whether successful or not)
-        if (hasPendingRedirect && !isStaleRedirect) {
-          clearRedirectState();
-          setIsProcessingRedirect(false);
-          isProcessingRedirectRef.current = false;
-        }
-
-        console.log('[AUTH:INIT] Initialization complete');
       } catch (error: any) {
         console.error('[AUTH:ERROR] Init error:', error);
-        if (!mounted) return;
-        clearRedirectState();
-        setIsProcessingRedirect(false);
-        isProcessingRedirectRef.current = false;
       }
     };
 
@@ -90,22 +36,12 @@ export function useAuth() {
     // Set up auth state listener
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!mounted) return;
-      console.log('[AUTH:STATE] Auth state changed:', user ? user.email : 'signed out', 'isProcessingRedirect:', isProcessingRedirectRef.current);
-
       if (user) {
-        // User authenticated - always update
         setUser(user);
-        setLoading(false);
-        setIsProcessingRedirect(false);
-        isProcessingRedirectRef.current = false;
-      } else if (!isProcessingRedirectRef.current) {
-        // No user AND not processing redirect - safe to show login
-        setUser(null);
-        setLoading(false);
       } else {
-        // No user BUT still processing redirect - keep loading state
-        console.log('[AUTH:STATE] Holding loading state while processing redirect');
+        setUser(null);
       }
+      setLoading(false);
     });
 
     return () => {
@@ -124,9 +60,6 @@ export function useAuth() {
       console.log('[AUTH:SUCCESS] Popup sign-in successful:', result.user.email);
     } catch (error: any) {
       console.error('[AUTH:ERROR] Error signing in with Google:', error);
-      clearRedirectState();
-      setIsProcessingRedirect(false);
-      isProcessingRedirectRef.current = false;
 
       // Provide more helpful error messages for common issues
       if (error.code === 'auth/popup-blocked') {
@@ -159,18 +92,13 @@ export function useAuth() {
   };
 
   const retrySignIn = () => {
-    console.log('[AUTH:RETRY] Clearing error state and resetting for retry');
-    clearRedirectState();
     setError(null);
-    setIsProcessingRedirect(false);
-    isProcessingRedirectRef.current = false;
   };
 
   return {
     user,
     loading,
     error,
-    isProcessingRedirect,
     signInWithGoogle,
     signOut,
     retrySignIn,
