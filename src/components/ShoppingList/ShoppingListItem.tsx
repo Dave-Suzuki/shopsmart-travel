@@ -1,14 +1,15 @@
-import { useState } from 'react';
-import { Trash2, Tag, Edit, MapPin, DollarSign, ExternalLink, Bookmark, RotateCcw } from 'lucide-react';
+import { useId } from 'react';
+import { Trash2, Pencil, Bookmark, RotateCcw } from 'lucide-react';
 import type { ShoppingListItem as Item, UpdateShoppingListItemInput } from '../../types/ShoppingList';
 import type { TripLocation } from '../../types/Trip';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { formatCurrency } from '../../utils/currency';
 import { toHttps } from '../../utils/url';
-import { showError } from '../../utils/toast';
-import { celebrateSaving, showCoins } from '../../utils/confetti';
 import { ImageModal } from '../Shared/ImageModal';
+import { ActionMenu } from '../Shared/ActionMenu';
 import { PurchaseRecordModal } from './PurchaseRecordModal';
+import { ItemThumbnail } from './ItemThumbnail';
+import { useItemActions } from './useItemActions';
 
 interface ShoppingListItemProps {
   item: Item;
@@ -21,225 +22,113 @@ interface ShoppingListItemProps {
   budgetCurrency: string;
 }
 
+/**
+ * One compact row of the list view (about 72px): checkbox, photo, name and details, price,
+ * and a "More actions" menu. Tapping the name opens the item (description, notes and the
+ * product link live there).
+ */
 export function ShoppingListItem({ item, onTogglePurchased, onUpdateItem, onDelete, onEdit, onSaveForLater, tripLocations = [], budgetCurrency }: ShoppingListItemProps) {
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  const [showFullDescription, setShowFullDescription] = useState(false);
-  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const actions = useItemActions(item, { onTogglePurchased, onDelete, onSaveForLater });
+  const nameId = useId();
+  const detailsId = useId();
 
-  const handleToggle = async () => {
-    try {
-      // If marking as purchased, open the purchase modal
-      if (!item.purchased) {
-        setIsPurchaseModalOpen(true);
-      } else {
-        // If marking as not purchased, just toggle directly
-        await onTogglePurchased(item.id, false);
-      }
-    } catch (error) {
-      showError('Failed to update item');
-    }
-  };
+  const priorityInfo = item.priority ? PRIORITY_LEVELS.find((p) => p.level === item.priority) : null;
+  const details = [
+    item.quantity > 1 && `Qty ${item.quantity}`,
+    priorityInfo && `${priorityInfo.icon} ${priorityInfo.label}`,
+    item.brand,
+    item.purchaseLocation && (item.purchaseLocation === 'Online' ? '🌐 Online' : item.purchaseLocation),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
-  const handleDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      try {
-        await onDelete(item.id);
-      } catch (error) {
-        showError('Failed to delete item');
-      }
-    }
-  };
-
-  const handleSaveForLater = async () => {
-    try {
-      const savingForLater = !item.savedForLater;
-      await onSaveForLater(item.id, savingForLater);
-      // Trigger confetti effects
-      if (savingForLater) {
-        celebrateSaving(); // Green confetti for saving money
-      } else {
-        showCoins(); // Gold coins for spending more
-      }
-    } catch (error) {
-      showError('Failed to update item');
-    }
-  };
-
-  const priorityInfo = item.priority ? PRIORITY_LEVELS.find(p => p.level === item.priority) : null;
+  const total = item.price * item.quantity;
+  const totalUSD = item.priceUSD && item.currency !== 'USD' ? item.priceUSD * item.quantity : null;
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border ${item.purchased ? 'border-green-200 bg-green-50' : 'border-gray-200'} p-3 sm:p-4 transition-colors duration-200`}>
-      <div className="flex items-start gap-2 sm:gap-3">
+    <li
+      className={`flex min-h-[72px] items-center gap-1 py-1 pl-1 sm:px-2 transition-colors duration-200 ${
+        item.purchased ? 'bg-green-50' : ''
+      }`}
+    >
+      {/* 44px tap area around a 24px box */}
+      <label className="-ml-0.5 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
         <input
           type="checkbox"
           checked={item.purchased}
-          onChange={handleToggle}
-          className="mt-0.5 sm:mt-1 w-4 h-4 sm:w-5 sm:h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+          onChange={actions.togglePurchased}
+          aria-label={`Bought: ${item.name}`}
+          className="h-6 w-6 cursor-pointer accent-green-600"
         />
+      </label>
 
-        {item.imageUrl && (
-          <div
-            className="flex-shrink-0 cursor-pointer hover:opacity-75 transition-opacity duration-200"
-            onClick={() => setIsImageModalOpen(true)}
-          >
-            <img
-              src={toHttps(item.imageUrl)}
-              alt={item.name}
-              className="w-14 h-14 sm:w-20 sm:h-20 object-cover rounded-lg border border-gray-200"
-            />
-          </div>
+      <ItemThumbnail
+        imageUrl={item.imageUrl}
+        name={item.name}
+        className="h-12 w-12 rounded-lg"
+        onOpen={actions.openImage}
+      />
+
+      <button
+        type="button"
+        onClick={() => onEdit(item)}
+        aria-label={`Edit ${item.name}`}
+        aria-describedby={details ? detailsId : undefined}
+        className="min-w-0 flex-1 self-stretch rounded-lg py-0.5 pl-2 pr-1 text-left transition-colors duration-200 hover:bg-gray-100/70"
+      >
+        <span
+          id={nameId}
+          className={`line-clamp-2 text-base font-medium leading-tight ${
+            item.purchased ? 'text-gray-500 line-through' : 'text-gray-900'
+          }`}
+        >
+          {item.name}
+        </span>
+        {details && (
+          <span id={detailsId} className="mt-0.5 block truncate text-[13px] leading-snug text-gray-500">
+            {details}
+          </span>
         )}
+      </button>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <h4 className={`font-medium text-sm sm:text-base ${item.purchased ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                  {item.name}
-                </h4>
-                {priorityInfo && (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white border"
-                    style={{ borderColor: priorityInfo.color, color: priorityInfo.color }}
-                    title={priorityInfo.label}
-                  >
-                    {priorityInfo.icon}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {item.brand && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                    {item.brand}
-                  </span>
-                )}
-                {item.category && (
-                  <div className="flex items-center gap-1">
-                    <Tag className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs text-gray-500">{item.category}</span>
-                  </div>
-                )}
-                {item.purchaseLocation && (
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs text-gray-500">
-                      {item.purchaseLocation === 'Online' ? '🌐 ' : ''}{item.purchaseLocation}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-1">
-              <button
-                onClick={() => onEdit(item)}
-                className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-1.5 rounded-lg transition-colors duration-200"
-                title="Edit item"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleSaveForLater}
-                className={`p-1.5 rounded-lg transition-colors duration-200 ${
-                  item.savedForLater
-                    ? 'text-green-500 hover:text-green-700 hover:bg-green-50'
-                    : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
-                }`}
-                title={item.savedForLater ? 'Restore to list' : 'Save for later'}
-              >
-                {item.savedForLater ? <RotateCcw className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={handleDelete}
-                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors duration-200"
-                title="Delete item"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-4 mt-1.5 sm:mt-2 text-xs sm:text-sm">
-            <span className="text-gray-600">Qty: {item.quantity}</span>
-            <div className="flex flex-col gap-0.5 sm:gap-1">
-              <span className="font-medium text-gray-900">
-                {formatCurrency(item.price * item.quantity, item.currency)}
-              </span>
-              {item.priceUSD && item.currency !== 'USD' && (
-                <div className="flex items-center gap-1 text-xs text-blue-600">
-                  <DollarSign className="w-3 h-3" />
-                  <span>
-                    {formatCurrency(item.priceUSD * item.quantity, 'USD')} USD
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {item.description && (
-            <div className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-gray-600">
-              {item.description.length > 150 && !showFullDescription ? (
-                <>
-                  <p>{item.description.substring(0, 150)}...</p>
-                  <button
-                    onClick={() => setShowFullDescription(true)}
-                    className="text-blue-500 hover:text-blue-700 text-xs font-medium mt-1"
-                  >
-                    Show more
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p>{item.description}</p>
-                  {item.description.length > 150 && (
-                    <button
-                      onClick={() => setShowFullDescription(false)}
-                      className="text-blue-500 hover:text-blue-700 text-xs font-medium mt-1"
-                    >
-                      Show less
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {item.productUrl && (
-            <a
-              href={item.productUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 text-xs sm:text-sm text-purple-600 hover:text-purple-700 hover:underline"
-            >
-              <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">View product page</span>
-              <span className="sm:hidden">Product link</span>
-            </a>
-          )}
-
-          {item.notes && (
-            <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-gray-500 italic">{item.notes}</p>
-          )}
-        </div>
+      <div className="shrink-0 pl-1 text-right">
+        <p className={`text-base font-semibold leading-snug ${item.purchased ? 'text-gray-500' : 'text-gray-900'}`}>
+          {formatCurrency(total, item.currency)}
+        </p>
+        {totalUSD !== null && (
+          <p className="text-[13px] leading-snug text-gray-500">≈ {formatCurrency(totalUSD, 'USD')}</p>
+        )}
       </div>
+
+      <ActionMenu
+        label="More actions"
+        describedBy={nameId}
+        items={[
+          { label: 'Edit', icon: Pencil, onSelect: () => onEdit(item) },
+          item.savedForLater
+            ? { label: 'Restore to list', icon: RotateCcw, onSelect: actions.toggleSavedForLater }
+            : { label: 'Save for later', icon: Bookmark, onSelect: actions.toggleSavedForLater },
+          { label: 'Delete', icon: Trash2, tone: 'danger', onSelect: actions.deleteItem },
+        ]}
+      />
 
       {item.imageUrl && (
         <ImageModal
           imageUrl={toHttps(item.imageUrl)!}
           altText={item.name}
-          isOpen={isImageModalOpen}
-          onClose={() => setIsImageModalOpen(false)}
+          isOpen={actions.isImageModalOpen}
+          onClose={actions.closeImage}
         />
       )}
 
       <PurchaseRecordModal
         item={item}
-        isOpen={isPurchaseModalOpen}
-        onClose={() => setIsPurchaseModalOpen(false)}
+        isOpen={actions.isPurchaseModalOpen}
+        onClose={actions.closePurchaseModal}
         onSave={onUpdateItem}
         tripLocations={tripLocations}
         budgetCurrency={budgetCurrency}
       />
-    </div>
+    </li>
   );
 }

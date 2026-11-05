@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { FirebaseError } from 'firebase/app';
 import type { User } from 'firebase/auth';
 import {
   onAuthStateChanged,
@@ -41,25 +42,26 @@ export function useAuth() {
       console.log('[AUTH:POPUP] Using popup flow for sign-in');
       const result = await signInWithPopup(auth, googleProvider);
       console.log('[AUTH:SUCCESS] Popup sign-in successful:', result.user.email);
-    } catch (error: any) {
+    } catch (error) {
       console.error('[AUTH:ERROR] Error signing in with Google:', error);
+      const code = error instanceof FirebaseError ? error.code : undefined;
 
       // Provide more helpful error messages for common issues
-      if (error.code === 'auth/popup-blocked') {
+      if (code === 'auth/popup-blocked') {
         setError('Popup blocked. Please allow popups for this site or try again.');
-      } else if (error.code === 'auth/popup-closed-by-user') {
+      } else if (code === 'auth/popup-closed-by-user') {
         setError('Sign-in cancelled. Please try again.');
-      } else if (error.code === 'auth/unauthorized-domain') {
+      } else if (code === 'auth/unauthorized-domain') {
         setError('This domain is not authorized. Please contact support.');
-      } else if (error.code === 'auth/cancelled-popup-request') {
+      } else if (code === 'auth/cancelled-popup-request') {
         // User opened another popup, ignore
         return;
-      } else if (error.code === 'auth/operation-not-allowed') {
+      } else if (code === 'auth/operation-not-allowed') {
         setError('Google sign-in is not enabled. Please contact support.');
-      } else if (error.code === 'auth/network-request-failed') {
+      } else if (code === 'auth/network-request-failed') {
         setError('Network error. Please check your connection and try again.');
       } else {
-        setError(error.message || 'Failed to sign in. Please try again.');
+        setError((error instanceof Error && error.message) || 'Failed to sign in. Please try again.');
       }
       throw error;
     }

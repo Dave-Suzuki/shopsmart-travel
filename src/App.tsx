@@ -72,7 +72,7 @@ function AuthenticatedApp() {
       <OnboardingProvider>
         <div className="min-h-screen bg-gray-50">
           <Header />
-          <main className="container mx-auto px-4 py-8">
+          <main className="container mx-auto px-4 py-4 sm:py-8">
             <Routes>
               <Route path="/" element={<TripsPage />} />
               <Route path="/trip/:tripId" element={<TripDetailPage />} />

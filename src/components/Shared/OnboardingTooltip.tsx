@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { useOnboarding } from '../../contexts/OnboardingContext';
+import { useOnboarding } from '../../hooks/useOnboarding';
 
 interface OnboardingTooltipProps {
   tipId: string;
@@ -18,23 +18,20 @@ export function OnboardingTooltip({
   showCondition = true,
 }: OnboardingTooltipProps) {
   const { isTipDismissed, dismissTip, hasCompletedOnboarding } = useOnboarding();
-  const [isVisible, setIsVisible] = useState(false);
-  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [delayElapsed, setDelayElapsed] = useState(false);
 
   const shouldShow = showCondition && !isTipDismissed(tipId) && !hasCompletedOnboarding;
 
   useEffect(() => {
-    if (shouldShow) {
-      // Small delay to allow rendering
-      const timer = setTimeout(() => setIsVisible(true), 500);
-      return () => clearTimeout(timer);
-    } else {
-      setIsVisible(false);
-    }
+    if (!shouldShow) return;
+    // Small delay to allow rendering
+    const timer = setTimeout(() => setDelayElapsed(true), 500);
+    return () => clearTimeout(timer);
   }, [shouldShow]);
 
+  const isVisible = shouldShow && delayElapsed;
+
   const handleDismiss = () => {
-    setIsVisible(false);
     dismissTip(tipId);
   };
 
@@ -56,23 +53,24 @@ export function OnboardingTooltip({
     <div className="relative inline-block">
       {children}
       {isVisible && (
-        <div
-          ref={tooltipRef}
-          className={`absolute z-50 ${positionClasses[position]} animate-fade-in`}
-        >
-          <div className="bg-blue-600 text-white px-4 py-3 rounded-lg shadow-lg max-w-xs">
-            <div className="flex items-start gap-2">
-              <p className="text-sm flex-1">{message}</p>
+        <div className={`absolute z-40 ${positionClasses[position]} motion-safe:animate-fade-in`}>
+          {/* A fixed width: an absolutely positioned box would otherwise shrink to its anchor */}
+          <div className="bg-blue-600 text-white pl-4 pr-1 py-2 rounded-lg shadow-lg w-72 max-w-[calc(100vw-2rem)] text-left">
+            <div className="flex items-start gap-1">
+              <p className="text-sm flex-1 pt-2">{message}</p>
               <button
+                type="button"
                 onClick={handleDismiss}
-                className="text-blue-200 hover:text-white transition-colors flex-shrink-0"
+                aria-label="Close"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-blue-100 hover:text-white transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
             <button
+              type="button"
               onClick={handleDismiss}
-              className="mt-2 text-xs text-blue-200 hover:text-white font-medium"
+              className="min-h-11 text-sm text-blue-100 hover:text-white font-medium"
             >
               Got it
             </button>

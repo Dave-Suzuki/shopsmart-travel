@@ -7,3 +7,11 @@
     @apply bg-gray-50 text-gray-900;
   }
 }
+
+@layer components {
+  /* Dialogs never cover the whole screen; dvh leaves room for mobile browser toolbars. */
+  .modal-panel {
+    max-height: 90vh;
+    max-height: 90dvh;
+  }
+}

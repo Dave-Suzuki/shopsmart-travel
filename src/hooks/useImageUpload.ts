@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FirebaseError } from 'firebase/app';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage, auth } from '../services/firebase';
 
@@ -60,7 +61,7 @@ export function useImageUpload() {
     } catch (err) {
       console.error('Error deleting image:', err);
       // Don't throw error if image doesn't exist
-      if ((err as any).code !== 'storage/object-not-found') {
+      if (!(err instanceof FirebaseError && err.code === 'storage/object-not-found')) {
         throw new Error('Failed to delete image');
       }
     }

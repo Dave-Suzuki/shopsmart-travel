@@ -4,8 +4,11 @@ import { ArrowLeft, Check, ShoppingCart, Package, AlertCircle } from 'lucide-rea
 import { useAuth } from '../hooks/useAuth';
 import { useTrips } from '../hooks/useTrips';
 import { useShoppingList } from '../hooks/useShoppingList';
+import { useExchangeRate } from '../hooks/useExchangeRate';
 import type { CreateShoppingListItemInput } from '../types/ShoppingList';
 import type { ItemInitialData } from '../components/ShoppingList/AddShoppingItem';
+import { ItemThumbnail } from '../components/ShoppingList/ItemThumbnail';
+import { convertCurrency, formatCurrency } from '../utils/currency';
 import { decodePayload } from '../utils/payload';
 
 interface ImportItem extends ItemInitialData {
@@ -20,6 +23,7 @@ export function BulkImportPage() {
   const { user, loading: authLoading } = useAuth();
   const { trips, loading: tripsLoading, fromCache: tripsFromCache } = useTrips(user?.uid || null);
   const { addItem } = useShoppingList(tripId || null);
+  const { rates } = useExchangeRate();
 
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
   const [importing, setImporting] = useState(false);
@@ -83,12 +87,17 @@ export function BulkImportPage() {
     [importItems]
   );
 
-  // Calculate total price of selected items
+  // Total of the selected items in the trip's budget currency (items can be priced in others)
+  const budgetCurrency = trip?.budgetCurrency || 'USD';
   const selectedTotal = useMemo(() => {
     return importItems
       .filter((item) => item.selected)
-      .reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
-  }, [importItems]);
+      .reduce((sum, item) => {
+        const amount = (item.price || 0) * (item.quantity || 1);
+        const currency = item.currency || budgetCurrency;
+        return sum + (currency === budgetCurrency ? amount : convertCurrency(amount, currency, budgetCurrency, rates));
+      }, 0);
+  }, [importItems, budgetCurrency, rates]);
 
   // Import selected items
   const handleImport = async () => {
@@ -138,8 +147,7 @@ export function BulkImportPage() {
   // Format price for display
   const formatPrice = (price?: number, currency?: string) => {
     if (price === undefined || price === null) return 'No price';
-    const curr = currency || trip?.budgetCurrency || 'USD';
-    return `${curr} ${price.toFixed(2)}`;
+    return formatCurrency(price, currency || budgetCurrency);
   };
 
   if (!trip) {
@@ -169,24 +177,24 @@ export function BulkImportPage() {
   if (parseError) {
     return (
       <div className="max-w-2xl mx-auto">
-        <button
-          onClick={() => navigate(`/app/trip/${tripId}`)}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
+        <Link
+          to={`/app/trip/${tripId}`}
+          className="-ml-1 mb-3 sm:mb-6 inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-gray-600 hover:text-gray-900 transition-colors duration-200"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           Back to Trip
-        </button>
+        </Link>
 
         <div className="bg-white rounded-lg shadow-md p-8 text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Import Error</h2>
           <p className="text-gray-600 mb-6">{parseError}</p>
-          <button
-            onClick={() => navigate(`/app/trip/${tripId}`)}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200"
+          <Link
+            to={`/app/trip/${tripId}`}
+            className="inline-flex min-h-11 items-center px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200"
           >
             Return to Shopping List
-          </button>
+          </Link>
         </div>
       </div>
     );
@@ -212,18 +220,18 @@ export function BulkImportPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <button
-        onClick={() => navigate(`/app/trip/${tripId}`)}
-        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
+      <Link
+        to={`/app/trip/${tripId}`}
+        className="-ml-1 mb-3 sm:mb-6 inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-gray-600 hover:text-gray-900 transition-colors duration-200"
       >
-        <ArrowLeft className="w-5 h-5" />
+        <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         Back to Trip
-      </button>
+      </Link>
 
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <ShoppingCart className="w-8 h-8 text-blue-600" />
+          <ShoppingCart className="w-8 h-8 shrink-0 text-blue-600" aria-hidden="true" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Import Shopping Cart</h1>
             <p className="text-gray-600">
@@ -233,17 +241,19 @@ export function BulkImportPage() {
         </div>
 
         {/* Selection controls */}
-        <div className="flex items-center justify-between border-t border-gray-200 pt-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-gray-200 pt-2">
+          <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => toggleAll(true)}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="min-h-11 px-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
             >
               Select All
             </button>
             <button
+              type="button"
               onClick={() => toggleAll(false)}
-              className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+              className="min-h-11 px-1 text-sm text-gray-600 hover:text-gray-700 font-medium"
             >
               Deselect All
             </button>
@@ -265,77 +275,64 @@ export function BulkImportPage() {
         ) : (
           <div className="divide-y divide-gray-200">
             {importItems.map((item) => (
-              <div
+              // The whole row is the checkbox's label, so tapping anywhere toggles it
+              <label
                 key={item.id}
-                onClick={() => toggleItem(item.id)}
-                className={`flex items-center gap-4 p-4 cursor-pointer transition-colors duration-200 ${
+                className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 cursor-pointer transition-colors duration-200 ${
                   item.selected ? 'bg-blue-50' : 'hover:bg-gray-50'
                 }`}
               >
-                {/* Checkbox */}
-                <div
-                  className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors duration-200 ${
-                    item.selected
-                      ? 'bg-blue-600 border-blue-600'
-                      : 'border-gray-300 bg-white'
-                  }`}
-                >
-                  {item.selected && <Check className="w-4 h-4 text-white" />}
-                </div>
+                <input
+                  type="checkbox"
+                  checked={item.selected}
+                  onChange={() => toggleItem(item.id)}
+                  className="h-6 w-6 flex-shrink-0 cursor-pointer accent-blue-600"
+                />
 
-                {/* Image */}
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name || 'Product'}
-                    className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Package className="w-8 h-8 text-gray-400" />
-                  </div>
-                )}
+                <ItemThumbnail
+                  imageUrl={item.imageUrl}
+                  name={item.name || 'Product'}
+                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg"
+                  iconClassName="w-7 h-7"
+                />
 
-                {/* Item details */}
-                <div className="flex-grow min-w-0">
-                  <h3 className="font-medium text-gray-900 truncate">
+                {/* Item details (spans: this is all inside the checkbox's label) */}
+                <span className="block flex-grow min-w-0">
+                  <span className="block font-medium text-gray-900 truncate">
                     {item.name || 'Unnamed Item'}
-                  </h3>
+                  </span>
                   {item.brand && (
-                    <p className="text-sm text-gray-500 truncate">{item.brand}</p>
+                    <span className="block text-sm text-gray-600 truncate">{item.brand}</span>
                   )}
                   {item.description && (
-                    <p className="text-sm text-gray-400 truncate mt-1">{item.description}</p>
+                    <span className="block text-sm text-gray-600 truncate mt-1">{item.description}</span>
                   )}
-                </div>
+                </span>
 
                 {/* Quantity and Price */}
-                <div className="text-right flex-shrink-0">
-                  <p className="font-medium text-gray-900">
+                <span className="block text-right flex-shrink-0">
+                  <span className="block font-medium text-gray-900">
                     {formatPrice(item.price, item.currency)}
-                  </p>
+                  </span>
                   {(item.quantity || 1) > 1 && (
-                    <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                    <span className="block text-sm text-gray-600">Qty: {item.quantity}</span>
                   )}
-                </div>
-              </div>
+                </span>
+              </label>
             ))}
           </div>
         )}
       </div>
 
       {/* Footer with import button */}
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
         {importError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {importError}
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-gray-600">
               {selectedCount} item{selectedCount !== 1 ? 's' : ''} selected
@@ -346,25 +343,26 @@ export function BulkImportPage() {
           </div>
 
           <div className="flex gap-3">
-            <button
-              onClick={() => navigate(`/app/trip/${tripId}`)}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+            <Link
+              to={`/app/trip/${tripId}`}
+              className="flex-1 sm:flex-none inline-flex min-h-11 items-center justify-center px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
             >
               Cancel
-            </button>
+            </Link>
             <button
+              type="button"
               onClick={handleImport}
               disabled={importing || selectedCount === 0}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center gap-2"
+              className="flex-1 sm:flex-none min-h-11 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2 whitespace-nowrap"
             >
               {importing ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  <div className="motion-safe:animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" aria-hidden="true"></div>
                   Importing...
                 </>
               ) : (
                 <>
-                  <Check className="w-5 h-5" />
+                  <Check className="w-5 h-5" aria-hidden="true" />
                   Import {selectedCount} Item{selectedCount !== 1 ? 's' : ''}
                 </>
               )}

@@ -19,21 +19,17 @@ interface TripListProps {
 }
 
 export function TripList({ trips, loading, fromCache, onCreateTrip, onDeleteTrip, onEditTrip, onShareTrip, currentUserId }: TripListProps) {
+  // The empty state has its own "New Trip" button: show one primary action, not two.
+  const showsEmptyState = trips.length === 0 && !loading && !fromCache;
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">My Trips</h2>
+      <div className="flex justify-between items-center gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900">My Trips</h1>
           <p className="text-gray-600 mt-1">Plan and manage your travel shopping</p>
         </div>
-        <OnboardingTooltip
-          tipId="first-trip"
-          message="Start by creating your first trip! Add your destination, dates, and budget."
-          position="left"
-          showCondition={trips.length === 0 && !loading && !fromCache}
-        >
-          <CreateTrip onCreateTrip={onCreateTrip} />
-        </OnboardingTooltip>
+        {!showsEmptyState && <CreateTrip onCreateTrip={onCreateTrip} />}
       </div>
 
       {loading && trips.length === 0 ? (
@@ -51,10 +47,17 @@ export function TripList({ trips, loading, fromCache, onCreateTrip, onDeleteTrip
           title="No trips yet"
           description="Create your first trip to start building your shopping list"
         >
-          <CreateTrip onCreateTrip={onCreateTrip} />
+          <OnboardingTooltip
+            tipId="first-trip"
+            message="Start by creating your first trip! Add your destination, dates, and budget."
+            position="bottom"
+            showCondition={showsEmptyState}
+          >
+            <CreateTrip onCreateTrip={onCreateTrip} />
+          </OnboardingTooltip>
         </EmptyState>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {trips.map((trip) => (
             <TripCard
               key={trip.id}

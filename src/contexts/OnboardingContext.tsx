@@ -1,23 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { OnboardingContext } from '../hooks/useOnboarding';
 
 interface OnboardingState {
   hasCompletedOnboarding: boolean;
   dismissedTips: Set<string>;
   currentStep: number;
 }
-
-interface OnboardingContextType {
-  hasCompletedOnboarding: boolean;
-  currentStep: number;
-  showWelcomeModal: boolean;
-  isTipDismissed: (tipId: string) => boolean;
-  dismissTip: (tipId: string) => void;
-  completeOnboarding: () => void;
-  closeWelcomeModal: () => void;
-  advanceStep: () => void;
-}
-
-const OnboardingContext = createContext<OnboardingContextType | null>(null);
 
 const STORAGE_KEY = 'shopsmart_onboarding';
 
@@ -56,14 +44,8 @@ function saveOnboardingState(state: OnboardingState) {
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OnboardingState>(loadOnboardingState);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-
-  // Check if we should show welcome modal on mount
-  useEffect(() => {
-    if (!state.hasCompletedOnboarding) {
-      setShowWelcomeModal(true);
-    }
-  }, []);
+  // Welcome first-time users (decided once, from the state loaded above)
+  const [showWelcomeModal, setShowWelcomeModal] = useState(() => !state.hasCompletedOnboarding);
 
   // Save state whenever it changes
   useEffect(() => {
@@ -120,12 +102,4 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       {children}
     </OnboardingContext.Provider>
   );
-}
-
-export function useOnboarding() {
-  const context = useContext(OnboardingContext);
-  if (!context) {
-    throw new Error('useOnboarding must be used within OnboardingProvider');
-  }
-  return context;
 }

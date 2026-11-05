@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X, UserPlus, Mail, Users, Trash2, LogOut } from 'lucide-react';
+import { UserPlus, Mail, Users, Trash2, LogOut } from 'lucide-react';
 import { FirebaseError } from 'firebase/app';
 import { doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../services/firebase';
 import type { Trip } from '../../types/Trip';
 import { showError } from '../../utils/toast';
+import { Modal } from '../Shared/Modal';
 
 interface ShareTripProps {
   /** The live trip, so membership changes show up while the dialog is open. */
@@ -163,148 +164,141 @@ export function ShareTrip({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <Users className="w-6 h-6 text-blue-600" />
-            <h2 className="text-2xl font-bold text-gray-900">{isCreator ? 'Share Trip' : 'Trip Members'}</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
-          >
-            <X className="w-6 h-6" />
-          </button>
+    <Modal
+      title={isCreator ? 'Share Trip' : 'Trip Members'}
+      icon={<Users className="w-6 h-6 shrink-0 text-blue-600" aria-hidden="true" />}
+      onClose={onClose}
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full min-h-11 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+        >
+          Close
+        </button>
+      }
+    >
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2 break-words">{trip.name}</h3>
+          <p className="text-sm text-gray-600">
+            {isCreator
+              ? 'Share this trip with others to collaborate on shopping items and budgets.'
+              : 'Only the person who created this trip can invite or remove people.'}
+          </p>
         </div>
 
-        <div className="p-6 space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{trip.name}</h3>
-            <p className="text-sm text-gray-600">
-              {isCreator
-                ? 'Share this trip with others to collaborate on shopping items and budgets.'
-                : 'Only the person who created this trip can invite or remove people.'}
-            </p>
-          </div>
-
-          {/* Current Collaborators */}
-          <div>
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Collaborators ({trip.owners.length})</h4>
-            {loadingCollaborators ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {trip.owners.map((uid) => {
-                  const isSelf = uid === currentUserId;
-                  const isTripCreator = uid === trip.createdBy;
-                  return (
-                    <div key={uid} className="flex items-center justify-between gap-2 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {nameFor(uid)}
-                            {isSelf && profiles[uid]?.displayName ? ' (you)' : ''}
-                          </p>
-                          {/* Emails are private; we only know (and show) our own */}
-                          {isSelf && currentUserEmail && (
-                            <p className="text-xs text-gray-500 truncate">{currentUserEmail}</p>
-                          )}
-                        </div>
+        {/* Current Collaborators */}
+        <div>
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">Collaborators ({trip.owners.length})</h4>
+          {loadingCollaborators ? (
+            <div className="text-center py-4" role="status">
+              <div className="motion-safe:animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto" aria-hidden="true"></div>
+              <span className="sr-only">Loading collaborators</span>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {trip.owners.map((uid) => {
+                const isSelf = uid === currentUserId;
+                const isTripCreator = uid === trip.createdBy;
+                return (
+                  <li key={uid} className="flex min-h-14 items-center justify-between gap-2 py-1.5 pl-3 pr-1 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {nameFor(uid)}
+                          {isSelf && profiles[uid]?.displayName ? ' (you)' : ''}
+                        </p>
+                        {/* Emails are private; we only know (and show) our own */}
+                        {isSelf && currentUserEmail && (
+                          <p className="text-xs text-gray-500 truncate">{currentUserEmail}</p>
+                        )}
                       </div>
-                      {isTripCreator ? (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium flex-shrink-0">
-                          Owner
-                        </span>
-                      ) : isSelf ? (
-                        <button
-                          onClick={handleLeaveTrip}
-                          className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 p-1 flex-shrink-0"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          Leave trip
-                        </button>
-                      ) : isCreator ? (
-                        <button
-                          onClick={() => handleRemoveCollaborator(uid)}
-                          className="text-red-500 hover:text-red-700 p-1 flex-shrink-0"
-                          title="Remove collaborator"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      ) : null}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Add Collaborator Form (creator only) */}
-          {isCreator && (
-            <form onSubmit={handleInvite} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  Add Collaborator by Email
-                </label>
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="email"
-                      id="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setError(null);
-                        setSuccess(null);
-                      }}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="collaborator@example.com"
-                      disabled={inviting}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={inviting || !email.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-                  >
-                    <UserPlus className="w-5 h-5" />
-                    {inviting ? 'Adding...' : 'Add'}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  The user must have signed in to the app at least once.
-                </p>
-              </div>
-
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              )}
-
-              {success && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-700">{success}</p>
-                </div>
-              )}
-            </form>
+                    {isTripCreator ? (
+                      <span className="mr-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium flex-shrink-0">
+                        Owner
+                      </span>
+                    ) : isSelf ? (
+                      <button
+                        type="button"
+                        onClick={handleLeaveTrip}
+                        className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                      >
+                        <LogOut className="w-4 h-4" aria-hidden="true" />
+                        Leave trip
+                      </button>
+                    ) : isCreator ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCollaborator(uid)}
+                        aria-label={`Remove ${nameFor(uid)}`}
+                        className="flex h-11 w-11 items-center justify-center rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 
-        <div className="p-6 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-          >
-            Close
-          </button>
-        </div>
+        {/* Add Collaborator Form (creator only) */}
+        {isCreator && (
+          <form onSubmit={handleInvite} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Add Collaborator by Email
+              </label>
+              <div className="flex gap-2">
+                <div className="flex-1 min-w-0 relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" aria-hidden="true" />
+                  <input
+                    type="email"
+                    id="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError(null);
+                      setSuccess(null);
+                    }}
+                    className="w-full min-h-11 pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="collaborator@example.com"
+                    disabled={inviting}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={inviting || !email.trim()}
+                  className="flex min-h-11 shrink-0 items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                >
+                  <UserPlus className="w-5 h-5" aria-hidden="true" />
+                  {inviting ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                The user must have signed in to the app at least once.
+              </p>
+            </div>
+
+            {error && (
+              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div role="status" className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700">{success}</p>
+              </div>
+            )}
+          </form>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

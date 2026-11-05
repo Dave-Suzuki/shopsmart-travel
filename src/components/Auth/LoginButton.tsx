@@ -192,7 +192,7 @@ export function LoginButton() {
         </button>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          Track your shopping list across Paris & London
+          Plan your shopping lists, budgets and currencies for every trip
         </p>
 
         {isDebugMode && (
@@ -235,7 +235,7 @@ export function LoginButton() {
                     >
                       <span className="text-gray-500">{new Date(log.timestamp).toLocaleTimeString()}</span>{' '}
                       {log.message}
-                      {log.data && <div className="text-gray-400 ml-4">{JSON.stringify(log.data, null, 2)}</div>}
+                      {log.data != null && <div className="text-gray-400 ml-4">{JSON.stringify(log.data, null, 2)}</div>}
                     </div>
                   ))
                 )}

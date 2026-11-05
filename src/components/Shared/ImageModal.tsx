@@ -1,4 +1,6 @@
-import { X } from 'lucide-react';
+import { useState } from 'react';
+import { ImageOff } from 'lucide-react';
+import { Modal } from './Modal';
 
 interface ImageModalProps {
   imageUrl: string;
@@ -9,27 +11,27 @@ interface ImageModalProps {
 
 export function ImageModal({ imageUrl, altText, isOpen, onClose }: ImageModalProps) {
   if (!isOpen) return null;
+  return <ImageDialog imageUrl={imageUrl} altText={altText} onClose={onClose} />;
+}
+
+function ImageDialog({ imageUrl, altText, onClose }: Omit<ImageModalProps, 'isOpen'>) {
+  const [failed, setFailed] = useState(false);
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
-      onClick={onClose}
-    >
-      <div className="relative max-w-4xl max-h-[90vh] w-full">
-        <button
-          onClick={onClose}
-          className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors duration-200"
-          title="Close"
-        >
-          <X className="w-8 h-8" />
-        </button>
+    <Modal title={altText} onClose={onClose} size="xl" bodyClassName="p-2 sm:p-4 bg-gray-50">
+      {failed ? (
+        <div className="flex flex-col items-center justify-center gap-2 py-16 text-gray-500">
+          <ImageOff className="w-10 h-10" aria-hidden="true" />
+          <p>This image couldn't be loaded.</p>
+        </div>
+      ) : (
         <img
           src={imageUrl}
           alt={altText}
-          className="w-full h-full object-contain rounded-lg"
-          onClick={(e) => e.stopPropagation()}
+          onError={() => setFailed(true)}
+          className="mx-auto max-h-[70vh] w-auto max-w-full object-contain rounded-lg"
         />
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }

@@ -40,7 +40,7 @@ export function ShoppingListItemTileSkeleton() {
 
 export function ShoppingListItemTileSkeletonGrid({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
+    <div className="-mx-2 sm:mx-0 grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
       {Array.from({ length: count }).map((_, i) => (
         <ShoppingListItemTileSkeleton key={i} />
       ))}

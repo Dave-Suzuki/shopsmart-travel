@@ -1,3 +1,5 @@
+import type { TripCategory } from '../types/Trip';
+
 export const CATEGORIES = [
   { value: 'Clothing', label: 'Clothing', icon: '👔' },
   { value: 'Electronics', label: 'Electronics', icon: '📱' },
@@ -12,3 +14,6 @@ export const CATEGORIES = [
 ] as const;
 
 export type Category = typeof CATEGORIES[number]['value'];
+
+/** The categories a trip starts with (and that trips without their own list use). */
+export const DEFAULT_CATEGORIES: TripCategory[] = CATEGORIES.map((category) => ({ ...category }));

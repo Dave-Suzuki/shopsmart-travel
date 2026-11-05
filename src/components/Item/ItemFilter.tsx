@@ -1,9 +1,10 @@
-import { Filter, X } from 'lucide-react';
+import { Filter } from 'lucide-react';
 import { useState } from 'react';
-import { CATEGORIES } from '../../constants/categories';
+import { DEFAULT_CATEGORIES } from '../../constants/categories';
 import { PRIORITY_LEVELS } from '../../constants/priorities';
 import type { PriorityLevel } from '../../constants/priorities';
 import type { TripLocation, TripCategory } from '../../types/Trip';
+import { Modal } from '../Shared/Modal';
 
 export interface ItemFilters {
   category?: string;
@@ -21,10 +22,31 @@ interface ItemFilterProps {
   availableBrands?: string[];
 }
 
-export function ItemFilter({ filters, onFilterChange, tripLocations = [], tripCategories = CATEGORIES as any as TripCategory[], availableBrands = [] }: ItemFilterProps) {
+const STATUS_OPTIONS: { value: NonNullable<ItemFilters['status']>; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'purchased', label: 'Purchased' },
+];
+
+const SELECT_CLASS =
+  'w-full min-h-11 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+
+const toggleClass = (selected: boolean) =>
+  `min-h-11 rounded-lg border-2 text-sm font-medium transition-colors duration-200 ${
+    selected ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:border-gray-300'
+  }`;
+
+export function ItemFilter({ filters, onFilterChange, tripLocations = [], tripCategories = DEFAULT_CATEGORIES, availableBrands = [] }: ItemFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const hasActiveFilters = filters.category || filters.priority || filters.purchaseLocation || filters.brand || (filters.status && filters.status !== 'all');
+  const activeCount = [
+    filters.category,
+    filters.priority,
+    filters.purchaseLocation,
+    filters.brand,
+    filters.status && filters.status !== 'all',
+  ].filter(Boolean).length;
+  const hasActiveFilters = activeCount > 0;
 
   const clearFilters = () => {
     onFilterChange({
@@ -37,169 +59,160 @@ export function ItemFilter({ filters, onFilterChange, tripLocations = [], tripCa
   };
 
   return (
-    <div className="relative">
+    <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all duration-200 ${
+        type="button"
+        onClick={() => setIsOpen(true)}
+        aria-haspopup="dialog"
+        aria-label={hasActiveFilters ? `Filter, ${activeCount} active` : 'Filter'}
+        className={`flex min-h-11 items-center gap-2 px-3 sm:px-4 py-2 rounded-lg border-2 transition-colors duration-200 ${
           hasActiveFilters
             ? 'border-blue-500 bg-blue-50 text-blue-700'
             : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
         }`}
       >
-        <Filter className="w-4 h-4" />
+        <Filter className="w-4 h-4" aria-hidden="true" />
         <span className="font-medium">Filter</span>
         {hasActiveFilters && (
-          <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-            {[filters.category, filters.priority, filters.purchaseLocation, filters.brand, filters.status !== 'all' && filters.status].filter(Boolean).length}
+          <span className="bg-blue-500 text-white text-xs rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+            {activeCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">Filter Items</h3>
+        <Modal
+          title="Filter Items"
+          size="sm"
+          onClose={() => setIsOpen(false)}
+          footer={
+            <div className="flex gap-3">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="flex-1 min-h-11 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
+                >
+                  Clear All
+                </button>
+              )}
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="flex-1 min-h-11 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
               >
-                <X className="w-5 h-5" />
+                Done
               </button>
             </div>
-
-            <div className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: 'all', label: 'All' },
-                    { value: 'pending', label: 'Pending' },
-                    { value: 'purchased', label: 'Purchased' },
-                  ].map((status) => (
+          }
+        >
+          <div className="space-y-5">
+            <fieldset className="min-w-0">
+              <legend className="block text-sm font-medium text-gray-700 mb-2">Status</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {STATUS_OPTIONS.map((status) => {
+                  const selected = (filters.status || 'all') === status.value;
+                  return (
                     <button
                       key={status.value}
-                      onClick={() => onFilterChange({ ...filters, status: status.value as ItemFilters['status'] })}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                        (filters.status || 'all') === status.value
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => onFilterChange({ ...filters, status: status.value })}
+                      className={`px-2 ${toggleClass(selected)}`}
                     >
                       {status.label}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
+            </fieldset>
 
-              <div>
-                <label htmlFor="filter-location" className="block text-sm font-medium text-gray-700 mb-2">
-                  Location
-                </label>
-                <select
-                  id="filter-location"
-                  value={filters.purchaseLocation || ''}
-                  onChange={(e) => onFilterChange({ ...filters, purchaseLocation: e.target.value || undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">All locations</option>
-                  {tripLocations.map((loc, index) => (
-                    <option key={index} value={loc.name}>
-                      {loc.name}
-                    </option>
-                  ))}
-                  <option value="Online">🌐 Online</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="filter-brand" className="block text-sm font-medium text-gray-700 mb-2">
-                  Brand / Store
-                </label>
-                <select
-                  id="filter-brand"
-                  value={filters.brand || ''}
-                  onChange={(e) => onFilterChange({ ...filters, brand: e.target.value || undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">All brands</option>
-                  {availableBrands.map((brand, index) => (
-                    <option key={index} value={brand}>
-                      {brand}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="filter-category" className="block text-sm font-medium text-gray-700 mb-2">
-                  Category
-                </label>
-                <select
-                  id="filter-category"
-                  value={filters.category || ''}
-                  onChange={(e) => onFilterChange({ ...filters, category: e.target.value || undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">All categories</option>
-                  {tripCategories.map((cat) => (
-                    <option key={cat.value} value={cat.value}>
-                      {cat.icon} {cat.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Priority
-                </label>
-                <div className="flex gap-1 justify-between">
-                  <button
-                    onClick={() => onFilterChange({ ...filters, priority: undefined })}
-                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium border-2 transition-all duration-200 ${
-                      !filters.priority
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    All
-                  </button>
-                  {PRIORITY_LEVELS.map((p) => (
-                    <button
-                      key={p.level}
-                      onClick={() => onFilterChange({ ...filters, priority: p.level })}
-                      className={`flex-1 flex flex-col items-center px-1 py-1 rounded-lg border-2 transition-all duration-200 ${
-                        filters.priority === p.level
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      title={p.label}
-                    >
-                      <span className="text-lg">{p.icon}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {hasActiveFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors duration-200"
-                >
-                  Clear All Filters
-                </button>
-              )}
+            <div>
+              <label htmlFor="filter-location" className="block text-sm font-medium text-gray-700 mb-2">
+                Location
+              </label>
+              <select
+                id="filter-location"
+                value={filters.purchaseLocation || ''}
+                onChange={(e) => onFilterChange({ ...filters, purchaseLocation: e.target.value || undefined })}
+                className={SELECT_CLASS}
+              >
+                <option value="">All locations</option>
+                {tripLocations.map((loc, index) => (
+                  <option key={index} value={loc.name}>
+                    {loc.name}
+                  </option>
+                ))}
+                <option value="Online">🌐 Online</option>
+              </select>
             </div>
+
+            <div>
+              <label htmlFor="filter-brand" className="block text-sm font-medium text-gray-700 mb-2">
+                Brand / Store
+              </label>
+              <select
+                id="filter-brand"
+                value={filters.brand || ''}
+                onChange={(e) => onFilterChange({ ...filters, brand: e.target.value || undefined })}
+                className={SELECT_CLASS}
+              >
+                <option value="">All brands</option>
+                {availableBrands.map((brand, index) => (
+                  <option key={index} value={brand}>
+                    {brand}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="filter-category" className="block text-sm font-medium text-gray-700 mb-2">
+                Category
+              </label>
+              <select
+                id="filter-category"
+                value={filters.category || ''}
+                onChange={(e) => onFilterChange({ ...filters, category: e.target.value || undefined })}
+                className={SELECT_CLASS}
+              >
+                <option value="">All categories</option>
+                {tripCategories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.icon} {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <fieldset className="min-w-0">
+              <legend className="block text-sm font-medium text-gray-700 mb-2">Priority</legend>
+              <div className="grid grid-cols-6 gap-1">
+                <button
+                  type="button"
+                  aria-pressed={!filters.priority}
+                  onClick={() => onFilterChange({ ...filters, priority: undefined })}
+                  className={`px-1 ${toggleClass(!filters.priority)}`}
+                >
+                  All
+                </button>
+                {PRIORITY_LEVELS.map((p) => (
+                  <button
+                    key={p.level}
+                    type="button"
+                    aria-label={p.label}
+                    aria-pressed={filters.priority === p.level}
+                    onClick={() => onFilterChange({ ...filters, priority: p.level })}
+                    className={`flex items-center justify-center ${toggleClass(filters.priority === p.level)}`}
+                  >
+                    <span className="text-lg" aria-hidden="true">{p.icon}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
           </div>
-        </>
+        </Modal>
       )}
-    </div>
+    </>
   );
 }

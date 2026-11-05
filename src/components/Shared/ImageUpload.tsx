@@ -59,9 +59,9 @@ export function ImageUpload({ currentImageUrl, onImageSelected, onImageRemoved }
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700">
+      <p className="block text-sm font-medium text-gray-700">
         Product Image
-      </label>
+      </p>
 
       {preview ? (
         <div className="relative inline-block">
@@ -73,10 +73,12 @@ export function ImageUpload({ currentImageUrl, onImageSelected, onImageRemoved }
           <button
             type="button"
             onClick={handleRemoveImage}
-            className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full shadow-lg transition-colors duration-200"
-            title="Remove image"
+            aria-label="Remove image"
+            className="absolute top-1 right-1 flex h-11 w-11 items-center justify-center rounded-full"
           >
-            <X className="w-4 h-4" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-colors duration-200">
+              <X className="w-4 h-4" aria-hidden="true" />
+            </span>
           </button>
         </div>
       ) : (
@@ -85,7 +87,7 @@ export function ImageUpload({ currentImageUrl, onImageSelected, onImageRemoved }
           onClick={handleClick}
           className="w-full h-48 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors duration-200 flex flex-col items-center justify-center gap-2 text-gray-500 hover:text-blue-600"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" aria-hidden="true">
             <Upload className="w-6 h-6" />
             <ImageIcon className="w-6 h-6" />
           </div>

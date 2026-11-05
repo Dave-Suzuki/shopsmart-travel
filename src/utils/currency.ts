@@ -1,33 +1,33 @@
 import type { ExchangeRates } from '../hooks/useExchangeRate';
 
-/**
- * Format a currency value with the appropriate symbol and formatting
- */
-export function formatCurrency(amount: number, currency: string): string {
-  const currencySymbols: Record<string, string> = {
-    USD: '$',
-    EUR: '€',
-    GBP: '£',
-    JPY: '¥',
-    CAD: 'C$',
-    AUD: 'A$',
-    CHF: 'CHF',
-    CNY: '¥',
-  };
+// One formatter per locale and currency; building an Intl.NumberFormat is relatively slow.
+const formatters = new Map<string, Intl.NumberFormat>();
 
-  const symbol = currencySymbols[currency] || currency;
-
-  // For JPY and CNY, don't show decimals
-  const decimals = ['JPY', 'CNY'].includes(currency) ? 0 : 2;
-
-  const formatted = amount.toFixed(decimals);
-
-  // Position symbol based on currency
-  if (['EUR'].includes(currency)) {
-    return `${formatted}${symbol}`;
+function currencyFormatter(currency: string, locale: string | undefined): Intl.NumberFormat {
+  const key = `${locale ?? ''}|${currency}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, { style: 'currency', currency });
+    formatters.set(key, formatter);
   }
+  return formatter;
+}
 
-  return `${symbol}${formatted}`;
+/**
+ * Formats an amount of money for display, e.g. "$1,392.98", "€320.00" or (in French) "320,00 €".
+ * Intl picks the symbol, its position and the number of decimals (none for JPY) for the locale.
+ *
+ * @param locale BCP 47 locale; defaults to the browser's locale.
+ */
+export function formatCurrency(amount: number, currency: string, locale?: string): string {
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : '';
+  try {
+    return currencyFormatter(code, locale).format(amount);
+  } catch {
+    // Not a well-formed ISO 4217 code (e.g. empty): show the number with whatever we were given.
+    const number = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+    return code ? `${number} ${code}` : number;
+  }
 }
 
 /**
@@ -91,24 +91,6 @@ export function formatLastUpdated(date: Date): string {
   } else {
     return date.toLocaleDateString();
   }
-}
-
-/**
- * Get the currency symbol for a given currency code
- */
-export function getCurrencySymbol(currency: string): string {
-  const currencySymbols: Record<string, string> = {
-    USD: '$',
-    EUR: '€',
-    GBP: '£',
-    JPY: '¥',
-    CAD: 'C$',
-    AUD: 'A$',
-    CHF: 'CHF',
-    CNY: '¥',
-  };
-
-  return currencySymbols[currency] || currency;
 }
 
 /**

@@ -1,46 +1,34 @@
-import { SkeletonText, SkeletonImage, SkeletonCircle } from '../Shared/Skeleton';
+import { SkeletonText, SkeletonImage } from '../Shared/Skeleton';
 
+// Same shape as a ShoppingListItem row, so nothing jumps when the list arrives.
 export function ShoppingListItemSkeleton() {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-      <div className="flex items-start gap-2 sm:gap-3">
-        <SkeletonCircle className="mt-0.5 sm:mt-1 w-4 h-4 sm:w-5 sm:h-5" />
-        <SkeletonImage className="w-14 h-14 sm:w-20 sm:h-20 rounded-lg flex-shrink-0" />
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <SkeletonText className="h-5 w-32" />
-                <SkeletonText className="h-5 w-8 rounded-full" />
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <SkeletonText className="h-4 w-16 rounded-md" />
-                <SkeletonText className="h-4 w-20" />
-              </div>
-            </div>
-            <div className="flex gap-1">
-              <SkeletonText className="w-7 h-7 rounded-lg" />
-              <SkeletonText className="w-7 h-7 rounded-lg" />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-4 mt-1.5 sm:mt-2">
-            <SkeletonText className="h-4 w-12" />
-            <SkeletonText className="h-4 w-20" />
-          </div>
-        </div>
+    <li className="flex min-h-[72px] items-center gap-1 py-1 pl-1 sm:px-2">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+        <SkeletonText className="h-6 w-6" />
       </div>
-    </div>
+      <SkeletonImage className="h-12 w-12 shrink-0 rounded-lg" />
+      <div className="min-w-0 flex-1 space-y-2 px-2">
+        <SkeletonText className="h-4 w-3/4" />
+        <SkeletonText className="h-3 w-1/2" />
+      </div>
+      <div className="flex shrink-0 flex-col items-end space-y-2 pl-1">
+        <SkeletonText className="h-4 w-16" />
+        <SkeletonText className="h-3 w-12" />
+      </div>
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+        <SkeletonText className="h-5 w-1.5 rounded-full" />
+      </div>
+    </li>
   );
 }
 
 export function ShoppingListItemSkeletonList({ count = 5 }: { count?: number }) {
   return (
-    <div className="space-y-2 sm:space-y-3">
+    <ul className="-mx-4 sm:mx-0 divide-y divide-gray-100 border-y border-gray-100" aria-hidden="true">
       {Array.from({ length: count }).map((_, i) => (
         <ShoppingListItemSkeleton key={i} />
       ))}
-    </div>
+    </ul>
   );
 }
