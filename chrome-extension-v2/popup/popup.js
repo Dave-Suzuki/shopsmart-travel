@@ -6,6 +6,17 @@
 const SHOPSMART_URL = 'https://shopsmart-800cb.web.app/app';
 const SHOPSMART_ORIGIN = 'https://shopsmart-800cb.web.app';
 
+// Encodes a value as UTF-8 JSON in base64url, for passing items to the app in a URL.
+// Must match decodePayload() in the web app (src/utils/payload.ts).
+function encodePayload(value) {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 // Helper to open or reuse existing ShopSmart tab
 async function openOrReuseTab(url) {
   // Query for existing ShopSmart tabs
@@ -209,7 +220,7 @@ async function init() {
       }
 
       console.log('Product data:', response.product);
-      const itemData = btoa(unescape(encodeURIComponent(JSON.stringify(response.product))));
+      const itemData = encodePayload(response.product);
       const url = `${SHOPSMART_URL}/trip/${tripId}?addItem=true&itemData=${encodeURIComponent(itemData)}`;
       console.log('Opening URL:', url);
       await openOrReuseTab(url);
@@ -251,7 +262,7 @@ async function init() {
         throw new Error('Cart appears to be empty');
       }
 
-      const itemsData = btoa(JSON.stringify(response.items));
+      const itemsData = encodePayload(response.items);
       const url = `${SHOPSMART_URL}/trip/${tripId}/import?items=${encodeURIComponent(itemsData)}`;
       await openOrReuseTab(url);
 

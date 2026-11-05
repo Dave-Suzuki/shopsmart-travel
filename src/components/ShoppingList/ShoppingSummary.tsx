@@ -3,70 +3,49 @@ import { TrendingDown, TrendingUp, ShoppingCart } from 'lucide-react';
 import type { ShoppingListItem } from '../../types/ShoppingList';
 import { formatCurrency } from '../../utils/currency';
 import { useExchangeRate } from '../../hooks/useExchangeRate';
-import { convertCurrency } from '../../utils/currency';
+import { computeBudget } from '../../utils/budget';
 
 interface ShoppingSummaryProps {
   items: ShoppingListItem[];
+  budget: number;
   budgetCurrency: string;
 }
 
-export function ShoppingSummary({ items, budgetCurrency }: ShoppingSummaryProps) {
+export function ShoppingSummary({ items, budget, budgetCurrency }: ShoppingSummaryProps) {
   const { rates } = useExchangeRate();
 
   const summary = useMemo(() => {
-    let totalPlanned = 0;
-    let totalActual = 0;
-    let itemsWithActualPrice = 0;
-    const purchasedCount = items.filter(item => item.purchased).length;
-
-    items.forEach(item => {
-      // Calculate planned total in budget currency
-      const plannedPrice = item.currency === budgetCurrency
-        ? item.price
-        : convertCurrency(item.price, item.currency, budgetCurrency, rates);
-
-      totalPlanned += plannedPrice * item.quantity;
-
-      // Calculate actual total if purchase price exists
-      if (item.purchased && item.purchasePrice !== undefined && item.purchaseCurrency) {
-        const actualPrice = item.purchaseCurrency === budgetCurrency
-          ? item.purchasePrice
-          : convertCurrency(item.purchasePrice, item.purchaseCurrency, budgetCurrency, rates);
-
-        totalActual += actualPrice * item.quantity;
-        itemsWithActualPrice++;
-      } else if (item.purchased) {
-        // If purchased but no actual price recorded, use planned price
-        totalActual += plannedPrice * item.quantity;
-      }
-    });
-
-    const difference = totalPlanned - totalActual;
-    const percentDifference = totalPlanned > 0 ? (difference / totalPlanned) * 100 : 0;
+    const activeItems = items.filter(item => !item.savedForLater);
+    const purchased = activeItems.filter(item => item.purchased);
+    const { spent, toBuy, savedVsPlan } = computeBudget(activeItems, budget, budgetCurrency, rates);
+    // What the purchased items were planned to cost (savedVsPlan = that - spent)
+    const plannedForPurchased = spent + savedVsPlan;
 
     return {
-      totalPlanned,
-      totalActual,
-      difference,
-      percentDifference,
-      purchasedCount,
-      totalItems: items.length,
-      itemsWithActualPrice,
+      totalPlanned: plannedForPurchased + toBuy,
+      totalActual: spent,
+      // Saved (+) or overspent (-) versus the planned prices of the items bought so far
+      difference: savedVsPlan,
+      percentDifference: plannedForPurchased > 0 ? (savedVsPlan / plannedForPurchased) * 100 : 0,
+      purchasedCount: purchased.length,
+      totalItems: activeItems.length,
+      itemsWithActualPrice: purchased.filter(item => item.purchasePrice != null).length,
     };
-  }, [items, budgetCurrency, rates]);
+  }, [items, budget, budgetCurrency, rates]);
 
   if (items.length === 0) {
     return null;
   }
 
-  const isSaving = summary.difference > 0;
-  const isOverspending = summary.difference < 0;
+  // Ignore sub-cent differences from currency conversion
+  const isSaving = summary.difference >= 0.005;
+  const isOverspending = summary.difference <= -0.005;
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
       <div className="flex items-center gap-2 mb-4">
-        <ShoppingCart className="w-5 h-5 text-blue-600" />
-        <h3 className="text-lg font-bold text-gray-900">Shopping Summary</h3>
+        <ShoppingCart className="w-5 h-5 text-blue-600" aria-hidden="true" />
+        <h2 className="text-lg font-bold text-gray-900">Shopping Summary</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -76,7 +55,7 @@ export function ShoppingSummary({ items, budgetCurrency }: ShoppingSummaryProps)
           <div className="text-2xl font-bold text-blue-900">
             {formatCurrency(summary.totalPlanned, budgetCurrency)}
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-gray-600 mt-1">
             {summary.totalItems} {summary.totalItems === 1 ? 'item' : 'items'}
           </div>
         </div>
@@ -95,7 +74,7 @@ export function ShoppingSummary({ items, budgetCurrency }: ShoppingSummaryProps)
               ? formatCurrency(summary.totalActual, budgetCurrency)
               : '—'}
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-gray-600 mt-1">
             {summary.purchasedCount} of {summary.totalItems} purchased
             {summary.itemsWithActualPrice > 0 && (
               <span className="ml-1">
@@ -117,10 +96,10 @@ export function ShoppingSummary({ items, budgetCurrency }: ShoppingSummaryProps)
         }`}>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm text-gray-600">
-              {isSaving ? 'Saved' : isOverspending ? 'Overspent' : 'On Budget'}
+              {isSaving ? 'Saved' : isOverspending ? 'Overspent' : 'On Plan'}
             </span>
-            {isSaving && <TrendingDown className="w-4 h-4 text-green-600" />}
-            {isOverspending && <TrendingUp className="w-4 h-4 text-red-600" />}
+            {isSaving && <TrendingDown className="w-4 h-4 text-green-600" aria-hidden="true" />}
+            {isOverspending && <TrendingUp className="w-4 h-4 text-red-600" aria-hidden="true" />}
           </div>
           <div className={`text-2xl font-bold ${
             !summary.purchasedCount
@@ -133,11 +112,11 @@ export function ShoppingSummary({ items, budgetCurrency }: ShoppingSummaryProps)
           }`}>
             {!summary.purchasedCount ? '—' : formatCurrency(Math.abs(summary.difference), budgetCurrency)}
           </div>
-          {summary.purchasedCount > 0 && Math.abs(summary.percentDifference) > 0 && (
+          {summary.purchasedCount > 0 && (isSaving || isOverspending) && (
             <div className={`text-xs mt-1 ${
-              isSaving ? 'text-green-600' : isOverspending ? 'text-red-600' : 'text-gray-500'
+              isSaving ? 'text-green-700' : isOverspending ? 'text-red-700' : 'text-gray-600'
             }`}>
-              {Math.abs(summary.percentDifference).toFixed(1)}% {isSaving ? 'under' : 'over'} budget
+              {Math.abs(summary.percentDifference).toFixed(1)}% {isSaving ? 'below' : 'above'} planned prices
             </div>
           )}
         </div>

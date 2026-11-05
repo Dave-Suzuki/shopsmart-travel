@@ -1,11 +1,13 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, DollarSign, LayoutList, LayoutGrid, ShoppingCart, Search, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTrips } from '../hooks/useTrips';
 import { useShoppingList } from '../hooks/useShoppingList';
 import { useExchangeRate } from '../hooks/useExchangeRate';
-import { convertCurrency } from '../utils/currency';
+import { computeBudget } from '../utils/budget';
+import { formatCurrency } from '../utils/currency';
+import { decodePayload } from '../utils/payload';
 import { AddShoppingItem, type ItemInitialData } from '../components/ShoppingList/AddShoppingItem';
 import { ShoppingListItem } from '../components/ShoppingList/ShoppingListItem';
 import { ShoppingListItemTile } from '../components/ShoppingList/ShoppingListItemTile';
@@ -19,13 +21,20 @@ import { ItemFilter, type ItemFilters } from '../components/Item/ItemFilter';
 import { ItemSort, type SortOption } from '../components/Item/ItemSort';
 import { ExchangeRateIndicator } from '../components/Currency/ExchangeRateIndicator';
 import type { ShoppingListItem as Item } from '../types/ShoppingList';
+import { calendarDay } from '../utils/dates';
+
+/** Reads the extension's itemData param (UTF-8 base64url JSON; older standard-base64 links work too). */
+function parseItemData(param: string | null): ItemInitialData | undefined {
+  if (!param) return undefined;
+  const decoded = decodePayload(param);
+  return decoded && typeof decoded === 'object' && !Array.isArray(decoded) ? (decoded as ItemInitialData) : undefined;
+}
 
 export function TripDetailPage() {
   const { tripId } = useParams<{ tripId: string }>();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useAuth();
-  const { trips } = useTrips(user?.uid || null);
+  const { user, loading: authLoading } = useAuth();
+  const { trips, loading: tripsLoading, fromCache: tripsFromCache } = useTrips(user?.uid || null);
   const { items, loading, generateItemId, addItem, updateItem, deleteItem, togglePurchased, saveForLater } = useShoppingList(tripId || null);
   const { rates } = useExchangeRate();
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -34,44 +43,31 @@ export function TripDetailPage() {
   const [sortBy, setSortBy] = useState<SortOption>('date-newest');
   const [showSavedForLater, setShowSavedForLater] = useState(false);
 
-  // Deep linking state for AddShoppingItem modal
-  const [deepLinkModalOpen, setDeepLinkModalOpen] = useState(false);
-  const [deepLinkInitialData, setDeepLinkInitialData] = useState<ItemInitialData | undefined>(undefined);
-
-  // Handle deep link query params for adding items
-  useEffect(() => {
-    const addItemParam = searchParams.get('addItem');
-    const itemDataParam = searchParams.get('itemData');
-
-    if (addItemParam === 'true') {
-      let initialData: ItemInitialData | undefined;
-
-      if (itemDataParam) {
-        try {
-          // Decode base64 and parse JSON
-          const decoded = atob(itemDataParam);
-          initialData = JSON.parse(decoded);
-        } catch (e) {
-          console.error('Failed to parse itemData param:', e);
-        }
-      }
-
-      setDeepLinkInitialData(initialData);
-      setDeepLinkModalOpen(true);
-
-      // Clear the URL params without reloading
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete('addItem');
-      newParams.delete('itemData');
-      setSearchParams(newParams, { replace: true });
+  // Deep link (Chrome extension / external add): ?addItem=true&itemData=... opens Add Item
+  // pre-filled. Each new link is captured into state while rendering, then removed from the URL.
+  const deepLinkParams = searchParams.get('addItem') === 'true' ? searchParams.toString() : null;
+  const [seenDeepLinkParams, setSeenDeepLinkParams] = useState<string | null>(null);
+  const [deepLink, setDeepLink] = useState<{ key: number; initialData?: ItemInitialData } | null>(null);
+  if (deepLinkParams !== seenDeepLinkParams) {
+    setSeenDeepLinkParams(deepLinkParams);
+    if (deepLinkParams !== null) {
+      const initialData = parseItemData(searchParams.get('itemData'));
+      setDeepLink((prev) => ({ key: (prev?.key ?? 0) + 1, initialData }));
     }
-  }, [searchParams, setSearchParams]);
+  }
 
-  // Close deep link modal handler
-  const handleDeepLinkModalClose = useCallback(() => {
-    setDeepLinkModalOpen(false);
-    setDeepLinkInitialData(undefined);
-  }, []);
+  // Clear the deep-link params from the URL without reloading
+  useEffect(() => {
+    if (searchParams.get('addItem') !== 'true') return;
+    const itemDataParam = searchParams.get('itemData');
+    if (itemDataParam && !parseItemData(itemDataParam)) {
+      console.error('Failed to parse itemData param');
+    }
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('addItem');
+    newParams.delete('itemData');
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const trip = trips.find((t) => t.id === tripId);
 
@@ -92,7 +88,7 @@ export function TripDetailPage() {
 
   const filteredAndSortedItems = useMemo(() => {
     // Filter active items (not saved for later)
-    let filtered = activeItems.filter(item => {
+    const filtered = activeItems.filter(item => {
       // Status filter
       if (filters.status === 'purchased' && !item.purchased) return false;
       if (filters.status === 'pending' && item.purchased) return false;
@@ -150,170 +146,201 @@ export function TripDetailPage() {
     }).format(date);
   };
 
-  if (!trip && trips.length > 0) {
+  if (!trip) {
+    if (authLoading || tripsLoading) {
+      return (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading trip...</p>
+        </div>
+      );
+    }
+
+    // Deleted, no longer shared with this user, or (offline) not in the local cache
     return (
       <div className="text-center py-12">
         <p className="text-gray-600">Trip not found</p>
-        <button
-          onClick={() => navigate('/')}
-          className="mt-4 text-blue-600 hover:text-blue-700"
-        >
+        {tripsFromCache && (
+          <p className="text-sm text-gray-500 mt-1">You're offline. Your trips will appear when you reconnect.</p>
+        )}
+        <Link to="/app" className="inline-block mt-4 text-blue-600 hover:text-blue-700">
           Back to Trips
-        </button>
+        </Link>
       </div>
     );
   }
 
-  if (!trip) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading trip...</p>
-      </div>
-    );
-  }
-
-  // Only count active items (not saved for later) toward budget
-  const totalSpent = activeItems.reduce((sum, item) => {
-    // Convert item price to budget currency
-    const itemPrice = item.currency === trip.budgetCurrency
-      ? item.price
-      : convertCurrency(item.price, item.currency, trip.budgetCurrency, rates);
-
-    return sum + (itemPrice * item.quantity);
-  }, 0);
+  // Saved-for-later items are left out of the budget
+  const budget = computeBudget(items, trip.budget, trip.budgetCurrency, rates);
+  const formatAmount = (amount: number) => formatCurrency(amount, trip.budgetCurrency);
 
   const purchasedCount = activeItems.filter((item) => item.purchased).length;
   const totalItems = activeItems.length;
+  // The empty state has its own "Add Item" button: show one primary action, not two.
+  const showsEmptyState = !loading && items.length === 0;
+
+  const itemHandlers = {
+    onTogglePurchased: togglePurchased,
+    onUpdateItem: updateItem,
+    onDelete: deleteItem,
+    onEdit: setEditingItem,
+    onSaveForLater: saveForLater,
+    tripLocations: trip.locations,
+    budgetCurrency: trip.budgetCurrency,
+  };
+
+  const renderItems = (list: Item[]) =>
+    viewMode === 'list' ? (
+      // Full-bleed rows on phones
+      <ul className="-mx-4 sm:mx-0 divide-y divide-gray-100 border-y border-gray-100">
+        {list.map((item) => (
+          <ShoppingListItem key={item.id} item={item} {...itemHandlers} />
+        ))}
+      </ul>
+    ) : (
+      // Two columns only where a tile still fits three 44px buttons (from 360px wide)
+      <div className="-mx-2 sm:mx-0 grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
+        {list.map((item) => (
+          <ShoppingListItemTile key={item.id} item={item} {...itemHandlers} />
+        ))}
+      </div>
+    );
+
+  const addItemButton = (
+    <AddShoppingItem
+      onAddItem={addItem}
+      generateItemId={generateItemId}
+      defaultCurrency={trip.budgetCurrency}
+      tripLocations={trip.locations}
+      tripCategories={trip.categories}
+    />
+  );
+
+  const viewButtonClass = (mode: 'list' | 'tile') =>
+    `flex min-h-11 min-w-11 items-center justify-center gap-1 px-2 sm:px-3 rounded-md text-sm font-medium transition-colors duration-200 ${
+      viewMode === mode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+    }`;
 
   return (
     <div className="max-w-7xl mx-auto">
-      <button
-        onClick={() => navigate('/')}
-        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
+      <Link
+        to="/app"
+        className="-ml-1 mb-3 sm:mb-6 inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-gray-600 hover:text-gray-900 transition-colors duration-200"
       >
-        <ArrowLeft className="w-5 h-5" />
+        <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         Back to Trips
-      </button>
+      </Link>
 
       {/* Trip Header */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">{trip.name}</h1>
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4 break-words">{trip.name}</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-center gap-2 text-gray-600">
-            <MapPin className="w-5 h-5" />
+            <MapPin className="w-5 h-5 shrink-0" aria-hidden="true" />
             <span>{trip.destination}</span>
           </div>
 
           <div className="flex items-center gap-2 text-gray-600">
-            <Calendar className="w-5 h-5" />
+            <Calendar className="w-5 h-5 shrink-0" aria-hidden="true" />
             <span>
-              {formatDate(trip.startDate)} - {formatDate(trip.endDate)}
+              {formatDate(calendarDay(trip.startDate))} - {formatDate(calendarDay(trip.endDate))}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-gray-600">
-            <DollarSign className="w-5 h-5" />
+          <div className="flex items-start gap-2 text-gray-600">
+            <DollarSign className="w-5 h-5 shrink-0" aria-hidden="true" />
             <div className="flex flex-col">
               <span className="font-medium">
-                Budget: {trip.budgetCurrency} {trip.budget.toLocaleString()}
+                {budget.usedPct === null
+                  ? 'No budget set'
+                  : `Budget: ${formatAmount(trip.budget)}`}
               </span>
-              <span className="text-sm">
-                Spent: {trip.budgetCurrency} {totalSpent.toFixed(2)}
-              </span>
+              <span className="text-sm">Spent: {formatAmount(budget.spent)}</span>
+              <span className="text-sm">To buy: {formatAmount(budget.toBuy)}</span>
+              {budget.usedPct !== null && (
+                <span className={`text-sm ${budget.free < 0 ? 'text-red-600 font-medium' : ''}`}>
+                  {budget.free < 0
+                    ? `Over budget by ${formatAmount(-budget.free)}`
+                    : `Free: ${formatAmount(budget.free)}`}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Budget Progress Bar */}
-        <div className="mt-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-1">
-            <span>Budget Progress</span>
-            <span>{((totalSpent / trip.budget) * 100).toFixed(1)}%</span>
+        {/* Budget Progress Bar: spent plus still to buy, against the budget */}
+        {budget.usedPct !== null && (
+          <div className="mt-4">
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>Budget used (spent + to buy)</span>
+              <span>{budget.usedPct.toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2" aria-hidden="true">
+              <div
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  budget.free < 0 ? 'bg-red-600' : 'bg-green-600'
+                }`}
+                style={{ width: `${Math.min(budget.usedPct, 100)}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-300 ${
-                totalSpent > trip.budget ? 'bg-red-600' : 'bg-green-600'
-              }`}
-              style={{ width: `${Math.min((totalSpent / trip.budget) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Shopping Summary */}
-      <ShoppingSummary items={activeItems} budgetCurrency={trip.budgetCurrency} />
+      <ShoppingSummary items={activeItems} budget={trip.budget} budgetCurrency={trip.budgetCurrency} />
 
       {/* Shopping List */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Shopping List</h2>
-            <p className="text-gray-600 mt-1">
-              {purchasedCount} of {totalItems} items purchased
-              {filteredAndSortedItems.length !== items.length && (
-                <span className="ml-2 text-blue-600">
-                  ({filteredAndSortedItems.length} shown)
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {/* View Toggle */}
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 ${
-                  viewMode === 'list'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                title="List view"
-              >
-                <LayoutList className="w-4 h-4" />
-                <span className="hidden sm:inline">List</span>
-              </button>
-              <button
-                onClick={() => setViewMode('tile')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 ${
-                  viewMode === 'tile'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                title="Tile view"
-              >
-                <LayoutGrid className="w-4 h-4" />
-                <span className="hidden sm:inline">Tiles</span>
-              </button>
-            </div>
-            <ItemSort
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-            />
-            <ItemFilter
-              filters={filters}
-              onFilterChange={setFilters}
-              tripLocations={trip.locations}
-              tripCategories={trip.categories}
-              availableBrands={availableBrands}
-            />
-            <OnboardingTooltip
-              tipId="add-item"
-              message="Add items you want to buy during your trip. Include prices to track your budget!"
-              position="left"
-              showCondition={items.length === 0 && !loading}
+      <section aria-labelledby="shopping-list-heading" className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="shopping-list-heading" className="text-xl sm:text-2xl font-bold text-gray-900">
+            Shopping List
+          </h2>
+          {!showsEmptyState && addItemButton}
+        </div>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">
+          {purchasedCount} of {totalItems} items purchased
+          {filteredAndSortedItems.length !== activeItems.length && (
+            <span className="text-blue-600"> · {filteredAndSortedItems.length} shown</span>
+          )}
+        </p>
+
+        <div className="mt-3 mb-4 flex flex-wrap items-center gap-2">
+          {/* View Toggle */}
+          <div className="flex bg-gray-100 rounded-lg p-0.5" role="group" aria-label="View">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-label="List view"
+              aria-pressed={viewMode === 'list'}
+              className={viewButtonClass('list')}
             >
-              <AddShoppingItem
-                onAddItem={addItem}
-                generateItemId={generateItemId}
-                defaultCurrency={trip.budgetCurrency}
-                tripLocations={trip.locations}
-                tripCategories={trip.categories}
-              />
-            </OnboardingTooltip>
+              <LayoutList className="w-4 h-4" aria-hidden="true" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('tile')}
+              aria-label="Tile view"
+              aria-pressed={viewMode === 'tile'}
+              className={viewButtonClass('tile')}
+            >
+              <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Tile</span>
+            </button>
           </div>
+          <ItemSort
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+          />
+          <ItemFilter
+            filters={filters}
+            onFilterChange={setFilters}
+            tripLocations={trip.locations}
+            tripCategories={trip.categories}
+            availableBrands={availableBrands}
+          />
         </div>
 
         {/* Exchange Rate Indicator */}
@@ -321,7 +348,7 @@ export function TripDetailPage() {
           <ExchangeRateIndicator />
         </div>
 
-        {loading ? (
+        {loading && items.length === 0 ? (
           viewMode === 'list' ? (
             <ShoppingListItemSkeletonList count={5} />
           ) : (
@@ -333,17 +360,18 @@ export function TripDetailPage() {
             title="Your shopping list is empty"
             description="Add items you want to buy during your trip"
           >
-            <AddShoppingItem
-              onAddItem={addItem}
-              generateItemId={generateItemId}
-              defaultCurrency={trip.budgetCurrency}
-              tripLocations={trip.locations}
-              tripCategories={trip.categories}
-            />
+            <OnboardingTooltip
+              tipId="add-item"
+              message="Add items you want to buy during your trip. Include prices to track your budget!"
+              position="bottom"
+              showCondition={showsEmptyState}
+            >
+              {addItemButton}
+            </OnboardingTooltip>
           </EmptyState>
         ) : activeItems.length === 0 && savedForLaterItems.length > 0 ? (
           <div className="text-center py-8 text-gray-500">
-            <Bookmark className="w-12 h-12 mx-auto mb-3 text-amber-400" />
+            <Bookmark className="w-12 h-12 mx-auto mb-3 text-amber-400" aria-hidden="true" />
             <p className="text-lg font-medium">All items are saved for later</p>
             <p className="text-sm mt-1">Expand the section below to view them</p>
           </div>
@@ -355,96 +383,37 @@ export function TripDetailPage() {
             actionLabel="Clear Filters"
             onAction={() => setFilters({ status: 'all' })}
           />
-        ) : viewMode === 'list' ? (
-          <div className="space-y-2 sm:space-y-3">
-            {filteredAndSortedItems.map((item) => (
-              <ShoppingListItem
-                key={item.id}
-                item={item}
-                onTogglePurchased={togglePurchased}
-                onUpdateItem={updateItem}
-                onDelete={deleteItem}
-                onEdit={setEditingItem}
-                onSaveForLater={saveForLater}
-                tripLocations={trip.locations}
-                budgetCurrency={trip.budgetCurrency}
-              />
-            ))}
-          </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
-            {filteredAndSortedItems.map((item) => (
-              <ShoppingListItemTile
-                key={item.id}
-                item={item}
-                onTogglePurchased={togglePurchased}
-                onUpdateItem={updateItem}
-                onDelete={deleteItem}
-                onEdit={setEditingItem}
-                onSaveForLater={saveForLater}
-                tripLocations={trip.locations}
-                budgetCurrency={trip.budgetCurrency}
-              />
-            ))}
-          </div>
+          renderItems(filteredAndSortedItems)
         )}
 
         {/* Saved for Later Section */}
         {savedForLaterItems.length > 0 && (
-          <div className="mt-8 border-t border-gray-200 pt-6">
+          <div className="mt-6 sm:mt-8 border-t border-gray-200 pt-4 sm:pt-6">
             <button
+              type="button"
               onClick={() => setShowSavedForLater(!showSavedForLater)}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors duration-200"
+              aria-expanded={showSavedForLater}
+              aria-controls="saved-for-later"
+              className="-ml-1 flex min-h-11 items-center gap-2 rounded-lg px-1 text-gray-700 hover:text-gray-900 transition-colors duration-200"
             >
-              <Bookmark className="w-5 h-5 text-amber-500" />
+              <Bookmark className="w-5 h-5 text-amber-500" aria-hidden="true" />
               <span className="font-semibold">Saved for Later ({savedForLaterItems.length})</span>
               {showSavedForLater ? (
-                <ChevronUp className="w-4 h-4" />
+                <ChevronUp className="w-4 h-4" aria-hidden="true" />
               ) : (
-                <ChevronDown className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4" aria-hidden="true" />
               )}
             </button>
 
             {showSavedForLater && (
-              <div className="mt-4">
-                {viewMode === 'list' ? (
-                  <div className="space-y-2 sm:space-y-3">
-                    {savedForLaterItems.map((item) => (
-                      <ShoppingListItem
-                        key={item.id}
-                        item={item}
-                        onTogglePurchased={togglePurchased}
-                        onUpdateItem={updateItem}
-                        onDelete={deleteItem}
-                        onEdit={setEditingItem}
-                        onSaveForLater={saveForLater}
-                        tripLocations={trip.locations}
-                        budgetCurrency={trip.budgetCurrency}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
-                    {savedForLaterItems.map((item) => (
-                      <ShoppingListItemTile
-                        key={item.id}
-                        item={item}
-                        onTogglePurchased={togglePurchased}
-                        onUpdateItem={updateItem}
-                        onDelete={deleteItem}
-                        onEdit={setEditingItem}
-                        onSaveForLater={saveForLater}
-                        tripLocations={trip.locations}
-                        budgetCurrency={trip.budgetCurrency}
-                      />
-                    ))}
-                  </div>
-                )}
+              <div id="saved-for-later" className="mt-4">
+                {renderItems(savedForLaterItems)}
               </div>
             )}
           </div>
         )}
-      </div>
+      </section>
 
       {editingItem && (
         <EditShoppingItem
@@ -459,16 +428,17 @@ export function TripDetailPage() {
       )}
 
       {/* Deep link modal for Chrome extension / external add */}
-      {deepLinkModalOpen && (
+      {deepLink && (
         <AddShoppingItem
+          key={deepLink.key}
           onAddItem={addItem}
           generateItemId={generateItemId}
           defaultCurrency={trip.budgetCurrency}
           tripLocations={trip.locations}
           tripCategories={trip.categories}
-          initialData={deepLinkInitialData}
-          externalIsOpen={deepLinkModalOpen}
-          onExternalClose={handleDeepLinkModalClose}
+          initialData={deepLink.initialData}
+          externalIsOpen
+          onExternalClose={() => setDeepLink(null)}
         />
       )}
     </div>

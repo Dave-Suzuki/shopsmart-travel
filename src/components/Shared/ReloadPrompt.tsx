@@ -7,10 +7,10 @@ export function ReloadPrompt() {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
-    onRegistered(r: any) {
-      console.log('SW Registered: ' + r);
+    onRegistered(registration: ServiceWorkerRegistration | undefined) {
+      console.log('SW Registered: ' + registration);
     },
-    onRegisterError(error: any) {
+    onRegisterError(error: unknown) {
       console.log('SW registration error', error);
     },
   });
@@ -47,14 +47,16 @@ export function ReloadPrompt() {
                 </p>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={handleUpdate}
-                    className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200"
+                    className="min-h-11 flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200"
                   >
                     Reload
                   </button>
                   <button
+                    type="button"
                     onClick={close}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                    className="min-h-11 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
                   >
                     Later
                   </button>
@@ -69,8 +71,9 @@ export function ReloadPrompt() {
                   ShopSmart is now ready to work offline!
                 </p>
                 <button
+                  type="button"
                   onClick={close}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
+                  className="min-h-11 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
                 >
                   Got it
                 </button>
@@ -79,10 +82,12 @@ export function ReloadPrompt() {
           </div>
 
           <button
+            type="button"
             onClick={close}
-            className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+            aria-label="Close"
+            className="-mr-2 -mt-2 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 transition-colors duration-200"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
       </div>

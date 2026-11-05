@@ -10,6 +10,10 @@ export default {
         'slide-up': 'slide-up 0.3s ease-out',
         'fade-in': 'fade-in 0.2s ease-out',
         'scale-in': 'scale-in 0.3s ease-out',
+        // Dialogs (see Shared/Modal.tsx); only used under motion-safe:
+        'backdrop-in': 'backdrop-in 0.2s ease-out',
+        'sheet-in': 'sheet-in 0.25s ease-out',
+        'dialog-in': 'scale-in 0.2s ease-out',
       },
       keyframes: {
         'slide-up': {
@@ -23,6 +27,14 @@ export default {
         'scale-in': {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        'backdrop-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        'sheet-in': {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
         },
       },
       colors: {

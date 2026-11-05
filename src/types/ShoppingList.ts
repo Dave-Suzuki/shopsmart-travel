@@ -42,24 +42,25 @@ export interface CreateShoppingListItemInput {
   productUrl?: string;
 }
 
+// Fields left undefined are unchanged. Optional fields can be set to null to remove them.
 export interface UpdateShoppingListItemInput {
   name?: string;
   quantity?: number;
   price?: number;
   currency?: string;
-  category?: string;
-  priority?: PriorityLevel;
-  purchaseLocation?: string;
-  brand?: string;
-  notes?: string;
+  category?: string | null;
+  priority?: PriorityLevel | null;
+  purchaseLocation?: string | null;
+  brand?: string | null;
+  notes?: string | null;
   purchased?: boolean;
-  savedForLater?: boolean;
+  savedForLater?: boolean | null;
   // Purchase tracking fields
-  purchasePrice?: number;
-  purchaseCurrency?: string;
-  purchaseDate?: Date;
-  actualPurchaseLocation?: string;
-  imageUrl?: string;
-  description?: string;
-  productUrl?: string;
+  purchasePrice?: number | null;
+  purchaseCurrency?: string | null;
+  purchaseDate?: Date | null;
+  actualPurchaseLocation?: string | null;
+  imageUrl?: string | null;
+  description?: string | null;
+  productUrl?: string | null;
 }

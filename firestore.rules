@@ -2,38 +2,105 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Keys added, removed or modified by an update
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // True if `field` is absent from `data`, or is a string that fully matches `pattern`
+    function isAbsentOrMatches(data, field, pattern) {
+      return !(field in data) || (data[field] is string && data[field].matches(pattern));
+    }
+
     // Helper function to check if user is trip owner
     function isTripOwner(tripId) {
-      return request.auth != null &&
+      return isSignedIn() &&
              request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.owners;
     }
 
-    // Users collection
-    match /users/{userId} {
-      // Allow users to read any user profile (for sharing/lookup)
-      allow read: if request.auth != null;
-
-      // Allow users to write only their own profile
-      allow write: if request.auth != null &&
-                      request.auth.uid == userId;
+    // `owners` must be a list of 1-20 user IDs. Rules have no loops, so every
+    // possible slot is type-checked explicitly.
+    function isValidOwners(owners) {
+      return owners is list && owners.size() >= 1 && owners.size() <= 20 &&
+             (owners.size() <= 0 || owners[0] is string) && (owners.size() <= 1 || owners[1] is string) &&
+             (owners.size() <= 2 || owners[2] is string) && (owners.size() <= 3 || owners[3] is string) &&
+             (owners.size() <= 4 || owners[4] is string) && (owners.size() <= 5 || owners[5] is string) &&
+             (owners.size() <= 6 || owners[6] is string) && (owners.size() <= 7 || owners[7] is string) &&
+             (owners.size() <= 8 || owners[8] is string) && (owners.size() <= 9 || owners[9] is string) &&
+             (owners.size() <= 10 || owners[10] is string) && (owners.size() <= 11 || owners[11] is string) &&
+             (owners.size() <= 12 || owners[12] is string) && (owners.size() <= 13 || owners[13] is string) &&
+             (owners.size() <= 14 || owners[14] is string) && (owners.size() <= 15 || owners[15] is string) &&
+             (owners.size() <= 16 || owners[16] is string) && (owners.size() <= 17 || owners[17] is string) &&
+             (owners.size() <= 18 || owners[18] is string) && (owners.size() <= 19 || owners[19] is string);
     }
 
-    // Exchange rates collection - all authenticated users can read and write
-    // (cached exchange rate data)
+    // The caller removes exactly themselves from `owners` and changes nothing else
+    // (apart from `updatedAt`)
+    function isLeavingTrip() {
+      return changedKeys().hasOnly(['owners', 'updatedAt']) &&
+             request.resource.data.owners.toSet() ==
+               resource.data.owners.toSet().difference([request.auth.uid].toSet());
+    }
+
+    // Identity fields in a user's private doc must match their own auth token, so nobody
+    // can claim someone else's uid or email (email lookups for sharing rely on this)
+    function hasOwnIdentity(userId) {
+      let data = request.resource.data;
+      return (!('uid' in data) || data.uid == userId) &&
+             (!('email' in data) || data.email == request.auth.token.email) &&
+             (!('emailLower' in data) || data.emailLower == request.auth.token.email.lower());
+    }
+
+    // Public profile card: display fields only
+    function isValidProfile(data) {
+      return data.keys().hasOnly(['displayName', 'photoURL', 'updatedAt']) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000));
+    }
+
+    // Users collection: private account record (uid, email, emailLower, displayName,
+    // photoURL, updatedAt). Only the user can read or write their own doc and nobody can
+    // list the collection; looking someone up by email happens server-side.
+    match /users/{userId} {
+      allow get: if isUser(userId);
+      allow list: if false;
+      allow create, update: if isUser(userId) && hasOwnIdentity(userId);
+      allow delete: if isUser(userId);
+    }
+
+    // Public profile cards (displayName, photoURL) shown to trip collaborators.
+    // Any signed-in user can fetch a single card by uid, but not list them.
+    match /profiles/{userId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create, update: if isUser(userId) && isValidProfile(request.resource.data);
+      allow delete: if isUser(userId);
+    }
+
+    // Exchange rates collection - clients trust the newest doc, so only the scheduled
+    // Cloud Function writes it (via the Admin SDK, which bypasses these rules)
     match /exchangeRates/{rateId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isSignedIn();
+      allow write: if false;
     }
 
     // Trips collection
     match /trips/{tripId} {
       // Allow read if user is owner
-      allow read: if request.auth != null &&
+      allow read: if isSignedIn() &&
                      request.auth.uid in resource.data.owners;
 
       // Allow create if user is authenticated and sets themselves as owner
       // with comprehensive field validation
-      allow create: if request.auth != null &&
+      allow create: if isSignedIn() &&
                        request.auth.uid in request.resource.data.owners &&
                        request.auth.uid == request.resource.data.createdBy &&
                        request.resource.data.keys().hasAll(['name', 'destination', 'budget', 'budgetCurrency', 'startDate', 'endDate', 'owners', 'createdBy']) &&
@@ -47,29 +114,33 @@ service cloud.firestore {
                        request.resource.data.budget >= 0 &&
                        request.resource.data.budgetCurrency is string &&
                        request.resource.data.budgetCurrency.size() == 3 &&
-                       request.resource.data.owners is list &&
-                       request.resource.data.owners.size() > 0;
+                       isValidOwners(request.resource.data.owners);
 
-      // Allow update if user is owner with validation
-      allow update: if request.auth != null &&
+      // Allow update by any member with validation
+      allow update: if isSignedIn() &&
                        request.auth.uid in resource.data.owners &&
                        // Prevent changing createdBy
                        request.resource.data.createdBy == resource.data.createdBy &&
-                       // Ensure at least one owner remains
-                       request.resource.data.owners.size() > 0 &&
+                       // The creator can never be removed
+                       resource.data.createdBy in request.resource.data.owners &&
+                       isValidOwners(request.resource.data.owners) &&
+                       // Only the creator manages membership; other members may only leave
+                       (!changedKeys().hasAny(['owners']) ||
+                        request.auth.uid == resource.data.createdBy ||
+                        isLeavingTrip()) &&
                        // Validate budget if changed
-                       (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['budget']) ||
+                       (!changedKeys().hasAny(['budget']) ||
                         (request.resource.data.budget is number && request.resource.data.budget >= 0)) &&
                        // Validate name if changed
-                       (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['name']) ||
+                       (!changedKeys().hasAny(['name']) ||
                         (request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200)) &&
                        // Validate destination if changed
-                       (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['destination']) ||
+                       (!changedKeys().hasAny(['destination']) ||
                         (request.resource.data.destination is string && request.resource.data.destination.size() > 0 && request.resource.data.destination.size() <= 200));
 
-      // Allow delete if user is owner
-      allow delete: if request.auth != null &&
-                       request.auth.uid in resource.data.owners;
+      // Only the creator can delete the trip
+      allow delete: if isSignedIn() &&
+                       request.auth.uid == resource.data.createdBy;
 
       // Shopping list items subcollection
       match /shoppingList/{itemId} {
@@ -95,31 +166,40 @@ service cloud.firestore {
                          // Validate notes length if present
                          (!request.resource.data.keys().hasAny(['notes']) || request.resource.data.notes.size() <= 5000) &&
                          // Validate description length if present
-                         (!request.resource.data.keys().hasAny(['description']) || request.resource.data.description.size() <= 500);
+                         (!request.resource.data.keys().hasAny(['description']) || request.resource.data.description.size() <= 500) &&
+                         // URLs are rendered as <img src> / <a href>, so only allow web schemes
+                         isAbsentOrMatches(request.resource.data, 'imageUrl', '^https://.*') &&
+                         isAbsentOrMatches(request.resource.data, 'productUrl', '^https?://.*');
 
         // Allow update with field validation
         allow update: if isTripOwner(tripId) &&
                          // Validate price if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['price']) ||
+                         (!changedKeys().hasAny(['price']) ||
                           (request.resource.data.price is number && request.resource.data.price >= 0)) &&
                          // Validate quantity if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['quantity']) ||
+                         (!changedKeys().hasAny(['quantity']) ||
                           (request.resource.data.quantity is int && request.resource.data.quantity >= 1 && request.resource.data.quantity <= 10000)) &&
                          // Validate name if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['name']) ||
+                         (!changedKeys().hasAny(['name']) ||
                           (request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 500)) &&
                          // Validate brand if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['brand']) ||
+                         (!changedKeys().hasAny(['brand']) ||
                           (request.resource.data.brand is string && request.resource.data.brand.size() <= 100)) &&
                          // Validate purchase price if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['purchasePrice']) ||
+                         (!changedKeys().hasAny(['purchasePrice']) ||
                           (request.resource.data.purchasePrice is number && request.resource.data.purchasePrice >= 0)) &&
                          // Validate purchase currency if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['purchaseCurrency']) ||
+                         (!changedKeys().hasAny(['purchaseCurrency']) ||
                           (request.resource.data.purchaseCurrency is string && request.resource.data.purchaseCurrency.size() == 3)) &&
                          // Validate purchase date if changed
-                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['purchaseDate']) ||
-                          request.resource.data.purchaseDate is timestamp);
+                         (!changedKeys().hasAny(['purchaseDate']) ||
+                          request.resource.data.purchaseDate is timestamp) &&
+                         // Validate URLs if changed (removing them is fine; legacy http:// image
+                         // URLs left untouched don't block edits to other fields)
+                         (!changedKeys().hasAny(['imageUrl']) ||
+                          isAbsentOrMatches(request.resource.data, 'imageUrl', '^https://.*')) &&
+                         (!changedKeys().hasAny(['productUrl']) ||
+                          isAbsentOrMatches(request.resource.data, 'productUrl', '^https?://.*'));
 
         // Allow delete if user is owner of the trip
         allow delete: if isTripOwner(tripId);

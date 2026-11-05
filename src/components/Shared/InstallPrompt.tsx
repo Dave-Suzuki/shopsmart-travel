@@ -15,19 +15,15 @@ export function InstallPrompt() {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
 
-      // Check if user has dismissed the prompt before
+      // Don't offer to install an installed app, or after the user said "Not now"
       const dismissed = localStorage.getItem('pwa-install-dismissed');
-      if (!dismissed) {
+      const installed = window.matchMedia('(display-mode: standalone)').matches;
+      if (!dismissed && !installed) {
         setShowPrompt(true);
       }
     };
 
     window.addEventListener('beforeinstallprompt', handler);
-
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setShowPrompt(false);
-    }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
@@ -56,7 +52,7 @@ export function InstallPrompt() {
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md z-50 animate-slide-up">
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md z-50 motion-safe:animate-slide-up">
       <div className="bg-white rounded-lg shadow-2xl border border-gray-200 p-4">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -73,14 +69,16 @@ export function InstallPrompt() {
 
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={handleInstall}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
+                className="flex-1 min-h-11 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
               >
                 Install
               </button>
               <button
+                type="button"
                 onClick={handleDismiss}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                className="min-h-11 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
               >
                 Not now
               </button>
@@ -88,10 +86,12 @@ export function InstallPrompt() {
           </div>
 
           <button
+            type="button"
             onClick={handleDismiss}
-            className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+            aria-label="Close"
+            className="-mr-2 -mt-2 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 transition-colors duration-200"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
       </div>

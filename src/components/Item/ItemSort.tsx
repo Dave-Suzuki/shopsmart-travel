@@ -1,5 +1,6 @@
-import { ArrowUpDown } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowUpDown, Check } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Modal } from '../Shared/Modal';
 
 export type SortOption = 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc' | 'brand-asc' | 'brand-desc' | 'priority-asc' | 'priority-desc' | 'date-newest' | 'date-oldest';
 
@@ -23,46 +24,49 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 export function ItemSort({ sortBy, onSortChange }: ItemSortProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const selectedRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div className="relative">
+    <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-300 bg-white text-gray-700 hover:border-gray-400 transition-all duration-200"
+        type="button"
+        onClick={() => setIsOpen(true)}
+        aria-label="Sort"
+        aria-haspopup="dialog"
+        className="flex min-h-11 min-w-11 items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border-2 border-gray-300 bg-white text-gray-700 hover:border-gray-400 transition-colors duration-200"
       >
-        <ArrowUpDown className="w-4 h-4" />
+        <ArrowUpDown className="w-4 h-4" aria-hidden="true" />
         <span className="font-medium hidden sm:inline">Sort</span>
       </button>
 
       {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-2">
-            <div className="px-3 py-2 border-b border-gray-200">
-              <p className="text-xs font-medium text-gray-500 uppercase">Sort by</p>
-            </div>
-            {SORT_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => {
-                  onSortChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 ${
-                  sortBy === option.value
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
+        <Modal title="Sort by" size="sm" onClose={() => setIsOpen(false)} initialFocusRef={selectedRef} bodyClassName="py-2">
+          <ul>
+            {SORT_OPTIONS.map((option) => {
+              const selected = sortBy === option.value;
+              return (
+                <li key={option.value}>
+                  <button
+                    ref={selected ? selectedRef : undefined}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => {
+                      onSortChange(option.value);
+                      setIsOpen(false);
+                    }}
+                    className={`flex min-h-11 w-full items-center justify-between gap-3 px-4 sm:px-6 text-left transition-colors duration-200 ${
+                      selected ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {option.label}
+                    {selected && <Check className="w-5 h-5 shrink-0" aria-hidden="true" />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Modal>
       )}
-    </div>
+    </>
   );
 }

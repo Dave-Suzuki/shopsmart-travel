@@ -1,6 +1,22 @@
 import * as functions from 'firebase-functions';
-import axios from 'axios';
+import { initializeApp } from 'firebase-admin/app';
 import * as cheerio from 'cheerio';
+import { enforceRateLimit, type RateLimitRule } from './rateLimit';
+import {
+  BLOCKED_DESTINATION,
+  BlockedDestinationError,
+  UNSUPPORTED_CONTENT_TYPE,
+  URL_NOT_ALLOWED,
+  UrlNotAllowedError,
+  assertUrlAllowed,
+  createHtmlFetcher,
+  hasErrorCode,
+} from './urlSafety';
+
+initializeApp();
+
+export { inviteCollaborator } from './invite';
+export { refreshExchangeRates } from './exchangeRates';
 
 export interface ProductInfo {
   name?: string;
@@ -81,11 +97,112 @@ function parsePrice(priceText: string): number | null {
   return isNaN(result) || result <= 0 ? null : result;
 }
 
+const MAX_URL_LENGTH = 2048;
+
+const SCRAPE_RATE_LIMIT: RateLimitRule = {
+  key: 'scrapeProductInfo',
+  max: 30,
+  windowMs: 60 * 60 * 1000,
+  message: 'Too many lookups. Try again in a few minutes.',
+};
+
+const PRIVATE_ADDRESS_MESSAGE =
+  "This link points to a private or local network address, so it can't be fetched.";
+
+// Realistic browser headers; many shops serve bots a stripped-down page otherwise.
+const BROWSER_HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Upgrade-Insecure-Requests': '1',
+};
+
+// Public addresses only (checked per connection and per redirect), max 3 redirects,
+// 8 s deadline, 2 MB body, HTML responses only. See urlSafety.ts.
+const fetchProductPage = createHtmlFetcher();
+
+const CONNECT_ERROR_CODES = ['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH'];
+const TIMEOUT_ERROR_CODES = ['ETIMEDOUT', 'ECONNABORTED', 'ERR_CANCELED'];
+
+/** Maps a fetch/parse failure to the user-facing `{ error }` reply. */
+function describeScrapeFailure(error: unknown, uid: string, url: string): ProductInfo {
+  if (hasErrorCode(error, BLOCKED_DESTINATION)) {
+    functions.logger.warn('Blocked request to a non-public address', {
+      uid,
+      url,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { error: PRIVATE_ADDRESS_MESSAGE };
+  }
+
+  functions.logger.error('Error scraping URL:', error);
+
+  if (hasErrorCode(error, URL_NOT_ALLOWED)) {
+    return {
+      error: "The website redirected to a link that can't be fetched. Please enter details manually.",
+    };
+  }
+
+  if (hasErrorCode(error, UNSUPPORTED_CONTENT_TYPE)) {
+    return {
+      error: "That link doesn't point to a web page. Please use the product page URL.",
+    };
+  }
+
+  if (hasErrorCode(error, 'ERR_FR_TOO_MANY_REDIRECTS')) {
+    return {
+      error: 'The website redirected too many times. Please enter details manually.',
+    };
+  }
+
+  if (CONNECT_ERROR_CODES.some((code) => hasErrorCode(error, code))) {
+    return {
+      error: 'Could not connect to the website. Please check the URL.',
+    };
+  }
+
+  if (TIMEOUT_ERROR_CODES.some((code) => hasErrorCode(error, code))) {
+    return {
+      error: 'Request timed out. The website took too long to respond.',
+    };
+  }
+
+  if (error instanceof Error && error.message.includes('maxContentLength')) {
+    return {
+      error: 'That page is too large to read automatically. Please enter details manually.',
+    };
+  }
+
+  const status = (error as { response?: { status?: number } } | null)?.response?.status;
+
+  if (status === 404) {
+    return {
+      error: 'Page not found (404). Please check the URL.',
+    };
+  }
+
+  if (status === 403 || status === 401) {
+    return {
+      error: 'Access denied. The website may require authentication.',
+    };
+  }
+
+  return {
+    error: 'Failed to fetch product information. Please enter details manually.',
+  };
+}
+
 /**
  * Cloud Function to scrape product information from a URL
  * Extracts Open Graph metadata and JSON-LD structured data
  */
-export const scrapeProductInfo = functions.https.onCall(async (request) => {
+export const scrapeProductInfo = functions.https.onCall(async (request): Promise<ProductInfo> => {
   // Validate authentication
   if (!request.auth) {
     throw new functions.https.HttpsError(
@@ -94,7 +211,7 @@ export const scrapeProductInfo = functions.https.onCall(async (request) => {
     );
   }
 
-  const { url } = request.data;
+  const url = (request.data as { url?: unknown } | null | undefined)?.url;
 
   // Validate URL
   if (!url || typeof url !== 'string') {
@@ -104,36 +221,33 @@ export const scrapeProductInfo = functions.https.onCall(async (request) => {
     );
   }
 
-  // Basic URL validation
-  try {
-    new URL(url);
-  } catch (error) {
+  if (url.length > MAX_URL_LENGTH) {
     throw new functions.https.HttpsError(
       'invalid-argument',
-      'Invalid URL format'
+      'URL is too long'
     );
   }
 
+  // Scheme, port, credential and IP-literal checks (the fetcher re-checks every hop)
   try {
-    // Fetch the page with a reasonable timeout and realistic browser headers
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      maxRedirects: 5,
-    });
+    assertUrlAllowed(url);
+  } catch (error) {
+    if (error instanceof UrlNotAllowedError) {
+      throw new functions.https.HttpsError('invalid-argument', error.message);
+    }
+    if (error instanceof BlockedDestinationError) {
+      throw new functions.https.HttpsError('invalid-argument', PRIVATE_ADDRESS_MESSAGE);
+    }
+    throw error;
+  }
 
-    const $ = cheerio.load(response.data);
+  // Max 30 lookups per rolling hour per user
+  await enforceRateLimit(request.auth.uid, SCRAPE_RATE_LIMIT);
+
+  try {
+    const html = await fetchProductPage(url, BROWSER_HEADERS);
+
+    const $ = cheerio.load(html);
     const result: ProductInfo = {};
 
     // Extract Open Graph metadata
@@ -379,7 +493,7 @@ export const scrapeProductInfo = functions.https.onCall(async (request) => {
 
                 if (result.price) return false; // Break
               }
-            } catch (e) {
+            } catch {
               // Invalid JSON, continue
             }
           }
@@ -508,7 +622,7 @@ export const scrapeProductInfo = functions.https.onCall(async (request) => {
             }
           }
         }
-      } catch (e) {
+      } catch {
         // Ignore errors
       }
     });
@@ -619,36 +733,8 @@ export const scrapeProductInfo = functions.https.onCall(async (request) => {
     functions.logger.info('Successfully scraped URL:', { url, result });
 
     return result;
-  } catch (error: any) {
-    functions.logger.error('Error scraping URL:', error);
-
+  } catch (error) {
     // Return user-friendly error messages
-    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-      return {
-        error: 'Could not connect to the website. Please check the URL.',
-      };
-    }
-
-    if (error.code === 'ETIMEDOUT') {
-      return {
-        error: 'Request timed out. The website took too long to respond.',
-      };
-    }
-
-    if (error.response?.status === 404) {
-      return {
-        error: 'Page not found (404). Please check the URL.',
-      };
-    }
-
-    if (error.response?.status === 403 || error.response?.status === 401) {
-      return {
-        error: 'Access denied. The website may require authentication.',
-      };
-    }
-
-    return {
-      error: 'Failed to fetch product information. Please enter details manually.',
-    };
+    return describeScrapeFailure(error, request.auth.uid, url);
   }
 });

@@ -1,5 +1,8 @@
 import confetti from 'canvas-confetti';
 
+// Every call passes disableForReducedMotion, so nothing animates for people who ask their
+// device for reduced motion.
+
 // Celebration confetti for saving money (saving item for later)
 export function celebrateSaving() {
   // Burst of colorful confetti from both sides
@@ -16,6 +19,7 @@ export function celebrateSaving() {
       spread: 55,
       origin: { x: 0, y: 0.6 },
       colors: colors,
+      disableForReducedMotion: true,
     });
     confetti({
       particleCount: 4,
@@ -23,6 +27,7 @@ export function celebrateSaving() {
       spread: 55,
       origin: { x: 1, y: 0.6 },
       colors: colors,
+      disableForReducedMotion: true,
     });
 
     if (Date.now() < end) {
@@ -50,6 +55,7 @@ export function showCoins() {
       colors: goldColors,
       scalar: 1.3,
       origin: { x: Math.random(), y: 0 }, // Random position at top
+      disableForReducedMotion: true,
     });
 
     if (Date.now() < end) {

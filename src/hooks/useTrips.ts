@@ -11,23 +11,41 @@ import {
   doc,
   getDocs,
   serverTimestamp,
-  Timestamp,
+  arrayRemove,
+  type DocumentData,
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage, auth } from '../services/firebase';
 import type { Trip, CreateTripInput, UpdateTripInput } from '../types/Trip';
+import { SERVER_GRACE_MS, isAwaitingServer, toDate } from '../utils/firestore';
+
+interface TripsSnapshot {
+  userId: string;
+  trips: Trip[];
+  fromCache: boolean;
+  /** False while cache-only data waits for the server (see SERVER_GRACE_MS). */
+  settled: boolean;
+  error: string | null;
+}
+
+const NO_TRIPS: Trip[] = [];
+
+function toTrip(id: string, data: DocumentData): Trip {
+  return {
+    id,
+    ...data,
+    startDate: toDate(data.startDate),
+    endDate: toDate(data.endDate),
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+  } as Trip;
+}
 
 export function useTrips(userId: string | null) {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<TripsSnapshot | null>(null);
 
   useEffect(() => {
-    if (!userId) {
-      setTrips([]);
-      setLoading(false);
-      return;
-    }
+    if (!userId) return;
 
     const q = query(
       collection(db, 'trips'),
@@ -35,33 +53,58 @@ export function useTrips(userId: string | null) {
       orderBy('createdAt', 'desc')
     );
 
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
-        const tripsData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            startDate: (data.startDate as Timestamp).toDate(),
-            endDate: (data.endDate as Timestamp).toDate(),
-            createdAt: (data.createdAt as Timestamp).toDate(),
-            updatedAt: (data.updatedAt as Timestamp).toDate(),
-          } as Trip;
-        });
-        setTrips(tripsData);
-        setLoading(false);
-        setError(null);
+      { includeMetadataChanges: true },
+      (snap) => {
+        clearTimeout(graceTimer);
+        const trips = snap.docs.map((d) => toTrip(d.id, d.data({ serverTimestamps: 'estimate' })));
+        const { fromCache } = snap.metadata;
+        const awaitingServer = isAwaitingServer(fromCache);
+
+        setSnapshot((prev) => ({
+          userId,
+          trips,
+          fromCache,
+          settled: (prev?.userId === userId && prev.settled) || !awaitingServer,
+          error: null,
+        }));
+
+        if (awaitingServer) {
+          graceTimer = setTimeout(() => {
+            setSnapshot((prev) =>
+              prev && prev.userId === userId && !prev.settled ? { ...prev, settled: true } : prev
+            );
+          }, SERVER_GRACE_MS);
+        }
       },
       (err) => {
+        clearTimeout(graceTimer);
         console.error('Error fetching trips:', err);
-        setError('Failed to load trips');
-        setLoading(false);
+        setSnapshot((prev) => ({
+          userId,
+          trips: prev?.userId === userId ? prev.trips : NO_TRIPS,
+          fromCache: prev?.userId === userId ? prev.fromCache : false,
+          settled: true,
+          error: 'Failed to load trips',
+        }));
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(graceTimer);
+      unsubscribe();
+    };
   }, [userId]);
+
+  // Only trust data that belongs to the current user.
+  const current = userId && snapshot?.userId === userId ? snapshot : null;
+  const trips = current?.trips ?? NO_TRIPS;
+  const loading = !!userId && !current?.settled;
+  const fromCache = current?.fromCache ?? false;
+  const error = current?.error ?? null;
 
   const createTrip = async (tripData: CreateTripInput) => {
     if (!userId) throw new Error('User not authenticated');
@@ -92,6 +135,7 @@ export function useTrips(userId: string | null) {
     }
   };
 
+  /** Deletes a trip and its shopping list. Only the trip's creator may do this. */
   const deleteTrip = async (tripId: string) => {
     try {
       const userId = auth.currentUser?.uid;
@@ -127,53 +171,16 @@ export function useTrips(userId: string | null) {
     }
   };
 
-  const shareTrip = async (tripId: string, userIdToAdd: string) => {
-    try {
-      const tripRef = doc(db, 'trips', tripId);
-      const trip = trips.find((t) => t.id === tripId);
-
-      if (!trip) {
-        throw new Error('Trip not found');
-      }
-
-      // Check for duplicate
-      if (trip.owners.includes(userIdToAdd)) {
-        throw new Error('User is already a collaborator');
-      }
-
-      const updatedOwners = [...trip.owners, userIdToAdd];
-
-      await updateDoc(tripRef, {
-        owners: updatedOwners,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      console.error('Error sharing trip:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to share trip');
-    }
-  };
-
+  /** Removes someone from a trip. Only the trip's creator may do this. */
   const removeCollaborator = async (tripId: string, userIdToRemove: string) => {
+    const trip = trips.find((t) => t.id === tripId);
+    if (!trip) throw new Error('Trip not found');
+    if (trip.createdBy !== userId) throw new Error('Only the trip creator can remove people');
+    if (userIdToRemove === trip.createdBy) throw new Error('Cannot remove the trip creator');
+
     try {
-      const tripRef = doc(db, 'trips', tripId);
-      const trip = trips.find((t) => t.id === tripId);
-
-      if (!trip) {
-        throw new Error('Trip not found');
-      }
-
-      if (trip.createdBy === userIdToRemove) {
-        throw new Error('Cannot remove the trip creator');
-      }
-
-      const updatedOwners = trip.owners.filter((ownerId) => ownerId !== userIdToRemove);
-
-      if (updatedOwners.length === 0) {
-        throw new Error('Cannot remove all collaborators');
-      }
-
-      await updateDoc(tripRef, {
-        owners: updatedOwners,
+      await updateDoc(doc(db, 'trips', tripId), {
+        owners: arrayRemove(userIdToRemove),
         updatedAt: serverTimestamp(),
       });
     } catch (err) {
@@ -182,14 +189,34 @@ export function useTrips(userId: string | null) {
     }
   };
 
+  /** Removes the current user from a trip they were invited to. */
+  const leaveTrip = async (tripId: string) => {
+    if (!userId) throw new Error('User not authenticated');
+    const trip = trips.find((t) => t.id === tripId);
+    if (trip?.createdBy === userId) {
+      throw new Error("You created this trip, so you can't leave it. Delete it instead.");
+    }
+
+    try {
+      await updateDoc(doc(db, 'trips', tripId), {
+        owners: arrayRemove(userId),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Error leaving trip:', err);
+      throw new Error('Failed to leave trip');
+    }
+  };
+
   return {
     trips,
     loading,
+    fromCache,
     error,
     createTrip,
     updateTrip,
     deleteTrip,
-    shareTrip,
     removeCollaborator,
+    leaveTrip,
   };
 }

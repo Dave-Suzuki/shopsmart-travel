@@ -6,7 +6,7 @@ export interface LogEntry {
   timestamp: number;
   level: 'log' | 'warn' | 'error';
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 class DebugLogger {
@@ -50,7 +50,7 @@ class DebugLogger {
     };
   }
 
-  private addLog(level: 'log' | 'warn' | 'error', message: string, data?: any) {
+  private addLog(level: 'log' | 'warn' | 'error', message: string, data?: unknown) {
     const entry: LogEntry = {
       timestamp: Date.now(),
       level,

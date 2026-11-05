@@ -2,16 +2,16 @@ import { SkeletonText, SkeletonButton } from '../Shared/Skeleton';
 
 export function TripCardSkeleton() {
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border border-gray-200">
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1">
           <SkeletonText className="h-6 w-3/4 mb-2" />
           <SkeletonText className="h-4 w-1/2" />
         </div>
         <div className="flex gap-1">
-          <SkeletonButton className="w-9 h-9" />
-          <SkeletonButton className="w-9 h-9" />
-          <SkeletonButton className="w-9 h-9" />
+          <SkeletonButton className="w-11 h-11" />
+          <SkeletonButton className="w-11 h-11" />
+          <SkeletonButton className="w-11 h-11" />
         </div>
       </div>
 
@@ -31,7 +31,7 @@ export function TripCardSkeleton() {
       </div>
 
       <div className="mt-4 pt-4 border-t border-gray-200">
-        <SkeletonButton className="w-full h-10" />
+        <SkeletonButton className="w-full h-11" />
       </div>
     </div>
   );
