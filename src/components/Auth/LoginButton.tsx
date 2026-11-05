@@ -4,15 +4,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { debugLogger, type LogEntry } from '../../utils/debugLogger';
 import { showSuccess, showError } from '../../utils/toast';
 
-interface LoginButtonProps {
-  isExtensionLogin?: boolean;
-}
-
-export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
+export function LoginButton() {
   const { signInWithGoogle, error: authError, retrySignIn } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showTimeout, setShowTimeout] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<{ authError: string | null; timestamp: number } | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
   // Check if debug mode is enabled
@@ -53,7 +49,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
     setIsLoading(true);
     try {
       await signInWithGoogle();
-    } catch (error) {
+    } catch {
       // Error is already logged in useAuth
     } finally {
       setIsLoading(false);
@@ -142,11 +138,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">ShopSmart Travel</h1>
-          <p className="text-gray-600">
-            {isExtensionLogin
-              ? 'Sign in to connect the Chrome extension'
-              : 'Your smart shopping companion for travel'}
-          </p>
+          <p className="text-gray-600">Your smart shopping companion for travel</p>
         </div>
 
         {authError && (
@@ -200,9 +192,7 @@ export function LoginButton({ isExtensionLogin = false }: LoginButtonProps) {
         </button>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          {isExtensionLogin
-            ? 'After signing in, you\'ll be connected to the extension'
-            : 'Track your shopping list across Paris & London'}
+          Track your shopping list across Paris & London
         </p>
 
         {isDebugMode && (

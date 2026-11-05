@@ -7,6 +7,8 @@ import { PRIORITY_LEVELS } from '../../constants/priorities';
 import { ImageUpload } from '../Shared/ImageUpload';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { showError } from '../../utils/toast';
+import { fromDateInput, toDateInput } from '../../utils/dates';
+import { toStorableLinkUrl } from '../../utils/url';
 
 interface EditShoppingItemProps {
   item: ShoppingListItem;
@@ -18,7 +20,7 @@ interface EditShoppingItemProps {
   tripCategories?: TripCategory[];
 }
 
-export function EditShoppingItem({ item, isOpen, onClose, onUpdateItem, tripLocations = [], budgetCurrency, tripCategories = CATEGORIES as any as TripCategory[] }: EditShoppingItemProps) {
+export function EditShoppingItem({ item, isOpen, onClose, onUpdateItem, tripLocations = [], budgetCurrency, tripCategories = CATEGORIES as unknown as TripCategory[] }: EditShoppingItemProps) {
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [shouldRemoveImage, setShouldRemoveImage] = useState(false);
@@ -39,7 +41,7 @@ export function EditShoppingItem({ item, isOpen, onClose, onUpdateItem, tripLoca
     // Purchase details
     purchasePrice: item.purchasePrice,
     purchaseCurrency: item.purchaseCurrency || budgetCurrency,
-    purchaseDate: item.purchaseDate ? new Date(item.purchaseDate).toISOString().split('T')[0] : '',
+    purchaseDate: item.purchaseDate ? toDateInput(item.purchaseDate) : '',
     actualPurchaseLocation: item.actualPurchaseLocation || '',
   });
 
@@ -57,38 +59,52 @@ export function EditShoppingItem({ item, isOpen, onClose, onUpdateItem, tripLoca
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Links are never saved as empty strings: unchanged -> leave alone, cleared -> remove (null)
+    const { productUrl: productUrlInput, purchaseDate: purchaseDateInput, ...fields } = formData;
+    const productUrl = productUrlInput.trim();
+    const productUrlUpdate =
+      productUrl === (item.productUrl ?? '') ? undefined : productUrl || (item.productUrl ? null : undefined);
+    if (productUrlUpdate && !toStorableLinkUrl(productUrlUpdate)) {
+      showError('Product links must start with http:// or https://');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      let imageUrl: string | undefined = item.imageUrl;
+      // undefined = keep the current image, null = remove it, string = the new upload
+      let imageUrl: string | null | undefined;
 
-      // Handle image removal
-      if (shouldRemoveImage && item.imageUrl) {
-        await deleteImage(item.id);
-        imageUrl = undefined;
-      }
-
-      // Handle new image upload
       if (selectedImage) {
         // Delete old image if exists
         if (item.imageUrl) {
           await deleteImage(item.id);
         }
         imageUrl = await uploadImage(selectedImage, item.id);
+      } else if (shouldRemoveImage && item.imageUrl) {
+        imageUrl = null;
       }
 
       const updates: UpdateShoppingListItemInput = {
-        ...formData,
+        ...fields,
         // Ensure quantity is an integer (Firestore rules require `quantity is int`)
-        quantity: Math.max(1, Math.floor(Number(formData.quantity) || 1)),
+        quantity: Math.max(1, Math.floor(Number(fields.quantity) || 1)),
         imageUrl,
-        // Convert purchaseDate string to Date object if provided
-        purchaseDate: formData.purchaseDate ? new Date(formData.purchaseDate) : undefined,
+        productUrl: productUrlUpdate,
+        // Convert the purchase date (a local calendar day) if provided
+        purchaseDate: (purchaseDateInput && fromDateInput(purchaseDateInput)) || undefined,
       };
 
       await onUpdateItem(item.id, updates);
+
+      if (imageUrl === null) {
+        // The item no longer points at the photo, so delete the file (best effort).
+        deleteImage(item.id).catch((err) => console.error('Error deleting image:', err));
+      }
+
       onClose();
-    } catch (error) {
+    } catch {
       showError('Failed to update item');
     } finally {
       setLoading(false);

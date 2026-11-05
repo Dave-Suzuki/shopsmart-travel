@@ -68,7 +68,7 @@ export function URLFetchButton({ onDataFetched }: URLFetchButtonProps) {
           return;
         }
         validatedUrl = urlObj.href; // Use normalized URL
-      } catch (e) {
+      } catch {
         setError('Invalid URL format');
         setLoading(false);
         return;
@@ -123,18 +123,21 @@ export function URLFetchButton({ onDataFetched }: URLFetchButtonProps) {
         setUrl('');
         setFetchedFields([]);
       }, 3000);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching product info:', err);
       setError(
-        err.message || 'Failed to fetch product information. Please try again or enter details manually.'
+        (err instanceof Error && err.message) ||
+          'Failed to fetch product information. Please try again or enter details manually.'
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      // This input sits inside the Add Item form: fetch instead of submitting the form
+      e.preventDefault();
       handleFetch();
     }
   };
@@ -160,7 +163,7 @@ export function URLFetchButton({ onDataFetched }: URLFetchButtonProps) {
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           placeholder="Paste product URL here..."
           className="w-full px-4 py-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-base"
           disabled={loading}

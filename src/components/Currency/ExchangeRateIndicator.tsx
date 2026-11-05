@@ -4,7 +4,7 @@ import { formatLastUpdated } from '../../utils/currency';
 import { useState } from 'react';
 
 export function ExchangeRateIndicator() {
-  const { lastUpdated, loading, error, refetch } = useExchangeRate();
+  const { lastUpdated, loading, error, canRefresh, refetch } = useExchangeRate();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -47,14 +47,16 @@ export function ExchangeRateIndicator() {
       <span className="text-blue-700">
         Exchange rates updated {lastUpdated ? formatLastUpdated(lastUpdated) : 'recently'}
       </span>
-      <button
-        onClick={handleRefresh}
-        disabled={isRefreshing}
-        className="ml-auto p-1 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
-        title="Refresh exchange rates"
-      >
-        <RefreshCw className={`w-3 h-3 text-blue-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-      </button>
+      {canRefresh && (
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="ml-auto p-1 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+          title="Refresh exchange rates"
+        >
+          <RefreshCw className={`w-3 h-3 text-blue-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
+      )}
     </div>
   );
 }

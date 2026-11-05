@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Check, ShoppingCart, Package, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTrips } from '../hooks/useTrips';
 import { useShoppingList } from '../hooks/useShoppingList';
 import type { CreateShoppingListItemInput } from '../types/ShoppingList';
 import type { ItemInitialData } from '../components/ShoppingList/AddShoppingItem';
+import { decodePayload } from '../utils/payload';
 
 interface ImportItem extends ItemInitialData {
   id: string; // Temporary ID for tracking selection
@@ -16,8 +17,8 @@ export function BulkImportPage() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
-  const { trips } = useTrips(user?.uid || null);
+  const { user, loading: authLoading } = useAuth();
+  const { trips, loading: tripsLoading, fromCache: tripsFromCache } = useTrips(user?.uid || null);
   const { addItem } = useShoppingList(tripId || null);
 
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
@@ -34,13 +35,16 @@ export function BulkImportPage() {
 
     if (itemsParam) {
       try {
-        // Decode base64 and parse JSON array
-        const decoded = atob(itemsParam);
-        const items: ItemInitialData[] = JSON.parse(decoded);
+        // UTF-8 base64url JSON array from the extension (older links work too)
+        const decoded = decodePayload(itemsParam);
 
-        if (!Array.isArray(items)) {
+        if (!Array.isArray(decoded)) {
           throw new Error('Expected an array of items');
         }
+
+        const items = decoded.filter(
+          (item): item is ItemInitialData => !!item && typeof item === 'object' && !Array.isArray(item)
+        );
 
         // Add temporary IDs and selection state
         const importItems: ImportItem[] = items.map((item, index) => ({
@@ -121,7 +125,7 @@ export function BulkImportPage() {
 
       // Redirect to trip detail page after short delay
       setTimeout(() => {
-        navigate(`/trip/${tripId}`);
+        navigate(`/app/trip/${tripId}`);
       }, 1500);
     } catch (error) {
       console.error('Import error:', error);
@@ -138,25 +142,26 @@ export function BulkImportPage() {
     return `${curr} ${price.toFixed(2)}`;
   };
 
-  if (!trip && trips.length > 0) {
+  if (!trip) {
+    if (authLoading || tripsLoading) {
+      return (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading trip...</p>
+        </div>
+      );
+    }
+
+    // Deleted, no longer shared with this user, or (offline) not in the local cache
     return (
       <div className="text-center py-12">
         <p className="text-gray-600">Trip not found</p>
-        <button
-          onClick={() => navigate('/')}
-          className="mt-4 text-blue-600 hover:text-blue-700"
-        >
+        {tripsFromCache && (
+          <p className="text-sm text-gray-500 mt-1">You're offline. Your trips will appear when you reconnect.</p>
+        )}
+        <Link to="/app" className="inline-block mt-4 text-blue-600 hover:text-blue-700">
           Back to Trips
-        </button>
-      </div>
-    );
-  }
-
-  if (!trip) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading trip...</p>
+        </Link>
       </div>
     );
   }
@@ -165,7 +170,7 @@ export function BulkImportPage() {
     return (
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => navigate(`/trip/${tripId}`)}
+          onClick={() => navigate(`/app/trip/${tripId}`)}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -177,7 +182,7 @@ export function BulkImportPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Import Error</h2>
           <p className="text-gray-600 mb-6">{parseError}</p>
           <button
-            onClick={() => navigate(`/trip/${tripId}`)}
+            onClick={() => navigate(`/app/trip/${tripId}`)}
             className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200"
           >
             Return to Shopping List
@@ -208,7 +213,7 @@ export function BulkImportPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <button
-        onClick={() => navigate(`/trip/${tripId}`)}
+        onClick={() => navigate(`/app/trip/${tripId}`)}
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
       >
         <ArrowLeft className="w-5 h-5" />
@@ -342,7 +347,7 @@ export function BulkImportPage() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => navigate(`/trip/${tripId}`)}
+              onClick={() => navigate(`/app/trip/${tripId}`)}
               className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
             >
               Cancel

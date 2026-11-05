@@ -1,4 +1,4 @@
-import { Plane } from 'lucide-react';
+import { Plane, WifiOff } from 'lucide-react';
 import type { Trip, CreateTripInput } from '../../types/Trip';
 import { TripCard } from './TripCard';
 import { TripCardSkeletonGrid } from './TripCardSkeleton';
@@ -9,6 +9,8 @@ import { OnboardingTooltip } from '../Shared/OnboardingTooltip';
 interface TripListProps {
   trips: Trip[];
   loading: boolean;
+  /** The trips came only from the offline cache. */
+  fromCache: boolean;
   onCreateTrip: (trip: CreateTripInput) => Promise<void>;
   onDeleteTrip: (tripId: string) => Promise<void>;
   onEditTrip: (trip: Trip) => void;
@@ -16,7 +18,7 @@ interface TripListProps {
   currentUserId: string;
 }
 
-export function TripList({ trips, loading, onCreateTrip, onDeleteTrip, onEditTrip, onShareTrip, currentUserId }: TripListProps) {
+export function TripList({ trips, loading, fromCache, onCreateTrip, onDeleteTrip, onEditTrip, onShareTrip, currentUserId }: TripListProps) {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -28,14 +30,21 @@ export function TripList({ trips, loading, onCreateTrip, onDeleteTrip, onEditTri
           tipId="first-trip"
           message="Start by creating your first trip! Add your destination, dates, and budget."
           position="left"
-          showCondition={trips.length === 0 && !loading}
+          showCondition={trips.length === 0 && !loading && !fromCache}
         >
           <CreateTrip onCreateTrip={onCreateTrip} />
         </OnboardingTooltip>
       </div>
 
-      {loading ? (
+      {loading && trips.length === 0 ? (
         <TripCardSkeletonGrid count={3} />
+      ) : trips.length === 0 && fromCache ? (
+        // Nothing cached and no server: don't claim the user has no trips.
+        <EmptyState
+          icon={WifiOff}
+          title="You're offline."
+          description="Your trips will appear when you reconnect."
+        />
       ) : trips.length === 0 ? (
         <EmptyState
           icon={Plane}

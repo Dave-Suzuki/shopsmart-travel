@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ShopSmart Travel",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwvFUUo1YLdi5zfSjKpaysClrhGS2eC+NDsBS2YY1UdZtRH+hk+No4aOyIfWWaPJA0SXvADli7exJHOQLqYYnUcsE4wCpVt/NEVZAd+D1dJBiMMSGlBsghifl9Z9MOOk+FTSMCD3eD7IQOe8uSp9C7gSEl37wim86+lJfdZ31I2a2rRYidByIWREAmXzgsZdRfo9A/yvNW0f8J/IimnDLjV+tQHeIeT2PmvhOV/LeQpBGluuM2sKaKiFb2J7Jcru6YCF8d+SlWcVqTtKNVCkjwfSLrDIRAM+J59FoVVf8X1ei3qZZSEf3PXdIkL24O7RkrKaI5kXZfgHX1Z1k6OsZ+wIDAQAB",
   "description": "Add products to your ShopSmart Travel shopping list from any website",
   "permissions": [

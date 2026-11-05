@@ -2,8 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useAuth } from './hooks/useAuth';
 import { useUserProfile } from './hooks/useUserProfile';
-import { useExtensionAuth } from './hooks/useExtensionAuth';
 import { OnboardingProvider } from './contexts/OnboardingContext';
+import { ExchangeRateProvider } from './contexts/ExchangeRateProvider';
 import { LoginButton } from './components/Auth/LoginButton';
 import { Header } from './components/Shared/Header';
 import { LandingPage } from './pages/LandingPage';
@@ -50,7 +50,6 @@ function LegacyImportRedirect() {
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
   useUserProfile(user);
-  const { isExtensionLogin, authSent } = useExtensionAuth(user);
 
   if (loading) {
     return (
@@ -64,44 +63,29 @@ function AuthenticatedApp() {
   }
 
   if (!user) {
-    return <LoginButton isExtensionLogin={isExtensionLogin} />;
-  }
-
-  // Show success message when auth sent to extension
-  if (isExtensionLogin && authSent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-md">
-          <div className="text-5xl mb-4">✅</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Connected!</h2>
-          <p className="text-gray-600 mb-4">
-            You're now signed in to the ShopSmart extension.
-          </p>
-          <p className="text-sm text-gray-500">
-            This tab will close automatically...
-          </p>
-        </div>
-      </div>
-    );
+    return <LoginButton />;
   }
 
   return (
-    <OnboardingProvider>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main className="container mx-auto px-4 py-8">
-          <Routes>
-            <Route path="/" element={<TripsPage />} />
-            <Route path="/trip/:tripId" element={<TripDetailPage />} />
-            <Route path="/trip/:tripId/import" element={<BulkImportPage />} />
-            <Route path="*" element={<Navigate to="/app" replace />} />
-          </Routes>
-        </main>
-        <InstallPrompt />
-        <ReloadPrompt />
-        <WelcomeModal />
-      </div>
-    </OnboardingProvider>
+    // One shared exchange-rate listener for every signed-in page.
+    <ExchangeRateProvider>
+      <OnboardingProvider>
+        <div className="min-h-screen bg-gray-50">
+          <Header />
+          <main className="container mx-auto px-4 py-8">
+            <Routes>
+              <Route path="/" element={<TripsPage />} />
+              <Route path="/trip/:tripId" element={<TripDetailPage />} />
+              <Route path="/trip/:tripId/import" element={<BulkImportPage />} />
+              <Route path="*" element={<Navigate to="/app" replace />} />
+            </Routes>
+          </main>
+          <InstallPrompt />
+          <ReloadPrompt />
+          <WelcomeModal />
+        </div>
+      </OnboardingProvider>
+    </ExchangeRateProvider>
   );
 }
 

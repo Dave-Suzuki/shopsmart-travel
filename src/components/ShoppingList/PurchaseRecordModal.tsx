@@ -3,6 +3,7 @@ import { X, DollarSign, Calendar, MapPin } from 'lucide-react';
 import type { ShoppingListItem, UpdateShoppingListItemInput } from '../../types/ShoppingList';
 import type { TripLocation } from '../../types/Trip';
 import { showError } from '../../utils/toast';
+import { fromDateInput, todayInput } from '../../utils/dates';
 
 interface PurchaseRecordModalProps {
   item: ShoppingListItem;
@@ -13,36 +14,43 @@ interface PurchaseRecordModalProps {
   budgetCurrency: string;
 }
 
-export function PurchaseRecordModal({
+export function PurchaseRecordModal({ isOpen, ...props }: PurchaseRecordModalProps) {
+  // Mount the form only while open, so each opening starts from the item's current values.
+  if (!isOpen) return null;
+  return <PurchaseRecordForm {...props} />;
+}
+
+function PurchaseRecordForm({
   item,
-  isOpen,
   onClose,
   onSave,
   tripLocations = [],
   budgetCurrency,
-}: PurchaseRecordModalProps) {
+}: Omit<PurchaseRecordModalProps, 'isOpen'>) {
   const [loading, setLoading] = useState(false);
   const [skipDetails, setSkipDetails] = useState(false);
 
   // Pre-fill with planned values
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     purchasePrice: item.price,
     purchaseCurrency: item.currency,
-    purchaseDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+    purchaseDate: todayInput(), // local calendar day, YYYY-MM-DD
     actualPurchaseLocation: item.purchaseLocation || '',
-  });
+  }));
 
-  // Get all unique currencies from trip locations + budget currency
+  // Currencies from the trip's locations, the budget and the item itself (so the pre-filled
+  // currency is always one of the options)
   const availableCurrencies = useMemo(() => {
     const currencies = new Set<string>();
     currencies.add(budgetCurrency);
+    currencies.add(item.currency);
     tripLocations.forEach(loc => {
       if (loc.currency) {
         currencies.add(loc.currency);
       }
     });
     return Array.from(currencies).sort();
-  }, [tripLocations, budgetCurrency]);
+  }, [tripLocations, budgetCurrency, item.currency]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,13 +65,14 @@ export function PurchaseRecordModal({
       if (!skipDetails) {
         updates.purchasePrice = formData.purchasePrice;
         updates.purchaseCurrency = formData.purchaseCurrency;
-        updates.purchaseDate = new Date(formData.purchaseDate);
+        const purchaseDate = fromDateInput(formData.purchaseDate);
+        if (purchaseDate) updates.purchaseDate = purchaseDate;
         updates.actualPurchaseLocation = formData.actualPurchaseLocation;
       }
 
       await onSave(item.id, updates);
       onClose();
-    } catch (error) {
+    } catch {
       showError('Failed to update purchase details');
     } finally {
       setLoading(false);
@@ -75,14 +84,12 @@ export function PurchaseRecordModal({
     try {
       await onSave(item.id, { purchased: true });
       onClose();
-    } catch (error) {
+    } catch {
       showError('Failed to mark item as purchased');
     } finally {
       setLoading(false);
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -112,7 +119,7 @@ export function PurchaseRecordModal({
                   <label htmlFor="purchase-price" className="block text-sm font-medium text-gray-700 mb-1">
                     <div className="flex items-center gap-1">
                       <DollarSign className="w-4 h-4" />
-                      Actual Price *
+                      {item.quantity > 1 ? 'Price per item' : 'Actual Price'} *
                     </div>
                   </label>
                   <input

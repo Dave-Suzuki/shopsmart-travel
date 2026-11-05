@@ -3,6 +3,7 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import type { Trip, UpdateTripInput } from '../../types/Trip';
 import { CATEGORIES } from '../../constants/categories';
 import { showError } from '../../utils/toast';
+import { fromDateInput, toDateInput } from '../../utils/dates';
 
 interface EditTripProps {
   trip: Trip;
@@ -18,8 +19,9 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
     destination: trip.destination,
     locations: trip.locations || [],
     categories: trip.categories || [...CATEGORIES],
-    startDate: trip.startDate,
-    endDate: trip.endDate,
+    // The inputs' "YYYY-MM-DD" values (local calendar days), converted on submit
+    startDate: toDateInput(trip.startDate),
+    endDate: toDateInput(trip.endDate),
     budget: trip.budget,
     budgetCurrency: trip.budgetCurrency,
   });
@@ -64,7 +66,13 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
     e.preventDefault();
 
     // Validate dates
-    if (formData.endDate < formData.startDate) {
+    const startDate = fromDateInput(formData.startDate);
+    const endDate = fromDateInput(formData.endDate);
+    if (!startDate || !endDate) {
+      showError('Please enter a start and end date');
+      return;
+    }
+    if (endDate < startDate) {
       showError('End date must be after start date');
       return;
     }
@@ -72,17 +80,13 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
     setLoading(true);
 
     try {
-      await onUpdateTrip(trip.id, formData);
+      await onUpdateTrip(trip.id, { ...formData, startDate, endDate });
       onClose();
-    } catch (error) {
+    } catch {
       showError('Failed to update trip');
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDateForInput = (date: Date) => {
-    return date.toISOString().split('T')[0];
   };
 
   if (!isOpen) return null;
@@ -247,8 +251,8 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
                 type="date"
                 id="edit-startDate"
                 required
-                value={formatDateForInput(formData.startDate)}
-                onChange={(e) => setFormData({ ...formData, startDate: new Date(e.target.value) })}
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -261,8 +265,8 @@ export function EditTrip({ trip, isOpen, onClose, onUpdateTrip }: EditTripProps)
                 type="date"
                 id="edit-endDate"
                 required
-                value={formatDateForInput(formData.endDate)}
-                onChange={(e) => setFormData({ ...formData, endDate: new Date(e.target.value) })}
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>

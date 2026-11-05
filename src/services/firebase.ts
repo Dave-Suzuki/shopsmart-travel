@@ -5,7 +5,12 @@ import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
 // Firebase configuration
@@ -29,8 +34,13 @@ export const auth = initializeAuth(app, {
   persistence: browserLocalPersistence,
   popupRedirectResolver: browserPopupRedirectResolver,
 });
-export const db = getFirestore(app);
+// Keep Firestore data in IndexedDB (shared by all open tabs) so trips and lists load offline
+// and after a reload. Falls back to an in-memory cache where IndexedDB isn't available.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
 
 // Configure Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();

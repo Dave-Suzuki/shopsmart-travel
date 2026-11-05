@@ -5,7 +5,7 @@ import { showError } from '../../utils/toast';
 
 interface TripCardProps {
   trip: Trip;
-  onDelete: (tripId: string) => void;
+  onDelete: (tripId: string) => Promise<void>;
   onEdit: (trip: Trip) => void;
   onShare: (trip: Trip) => void;
   currentUserId: string;
@@ -28,14 +28,14 @@ export function TripCard({ trip, onDelete, onEdit, onShare, currentUserId }: Tri
     if (window.confirm(`Are you sure you want to delete "${trip.name}"?`)) {
       try {
         await onDelete(trip.id);
-      } catch (error) {
+      } catch {
         showError('Failed to delete trip');
       }
     }
   };
 
   const handleViewDetails = () => {
-    navigate(`/trip/${trip.id}`);
+    navigate(`/app/trip/${trip.id}`);
   };
 
   return (
@@ -70,13 +70,16 @@ export function TripCard({ trip, onDelete, onEdit, onShare, currentUserId }: Tri
           >
             <Edit className="w-5 h-5" />
           </button>
-          <button
-            onClick={handleDelete}
-            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors duration-200"
-            title="Delete trip"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
+          {/* Only the creator can delete a trip; others can leave it from the share dialog */}
+          {isOwner && (
+            <button
+              onClick={handleDelete}
+              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors duration-200"
+              title="Delete trip"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 

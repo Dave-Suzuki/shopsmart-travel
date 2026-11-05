@@ -8,62 +8,109 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   doc,
   serverTimestamp,
   Timestamp,
+  type DocumentData,
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage, auth } from '../services/firebase';
 import type { ShoppingListItem, CreateShoppingListItemInput, UpdateShoppingListItemInput } from '../types/ShoppingList';
 import { useExchangeRate } from './useExchangeRate';
 import { convertCurrency } from '../utils/currency';
+import { SERVER_GRACE_MS, isAwaitingServer, toDate } from '../utils/firestore';
+import { toStorableImageUrl, toStorableLinkUrl } from '../utils/url';
+
+// Every item keeps these; any other field is removed when updated to null.
+const REQUIRED_FIELDS = new Set(['name', 'quantity', 'price', 'currency', 'purchased']);
+
+interface ItemsSnapshot {
+  tripId: string;
+  items: ShoppingListItem[];
+  fromCache: boolean;
+  /** False while cache-only data waits for the server (see SERVER_GRACE_MS). */
+  settled: boolean;
+  error: string | null;
+}
+
+const NO_ITEMS: ShoppingListItem[] = [];
+
+function toItem(id: string, data: DocumentData): ShoppingListItem {
+  return {
+    id,
+    ...data,
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+    purchaseDate: data.purchaseDate instanceof Timestamp ? data.purchaseDate.toDate() : undefined,
+  } as ShoppingListItem;
+}
 
 export function useShoppingList(tripId: string | null) {
-  const [items, setItems] = useState<ShoppingListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<ItemsSnapshot | null>(null);
   const { rates } = useExchangeRate();
 
   useEffect(() => {
-    if (!tripId) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
+    if (!tripId) return;
 
     const q = query(
       collection(db, `trips/${tripId}/shoppingList`),
       orderBy('createdAt', 'desc')
     );
 
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
-        const itemsData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            // Handle null timestamps (can happen with serverTimestamp() before sync)
-            createdAt: data.createdAt ? (data.createdAt as Timestamp).toDate() : new Date(),
-            updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate() : new Date(),
-            // Handle optional date fields
-            purchaseDate: data.purchaseDate ? (data.purchaseDate as Timestamp).toDate() : undefined,
-          } as ShoppingListItem;
-        });
-        setItems(itemsData);
-        setLoading(false);
-        setError(null);
+      { includeMetadataChanges: true },
+      (snap) => {
+        clearTimeout(graceTimer);
+        // Estimate server timestamps of pending (e.g. offline) writes instead of reading null.
+        const items = snap.docs.map((d) => toItem(d.id, d.data({ serverTimestamps: 'estimate' })));
+        const { fromCache } = snap.metadata;
+        const awaitingServer = isAwaitingServer(fromCache);
+
+        setSnapshot((prev) => ({
+          tripId,
+          items,
+          fromCache,
+          settled: (prev?.tripId === tripId && prev.settled) || !awaitingServer,
+          error: null,
+        }));
+
+        if (awaitingServer) {
+          graceTimer = setTimeout(() => {
+            setSnapshot((prev) =>
+              prev && prev.tripId === tripId && !prev.settled ? { ...prev, settled: true } : prev
+            );
+          }, SERVER_GRACE_MS);
+        }
       },
       (err) => {
+        clearTimeout(graceTimer);
         console.error('Error fetching shopping list:', err);
-        setError('Failed to load shopping list');
-        setLoading(false);
+        setSnapshot((prev) => ({
+          tripId,
+          items: prev?.tripId === tripId ? prev.items : NO_ITEMS,
+          fromCache: prev?.tripId === tripId ? prev.fromCache : false,
+          settled: true,
+          error: 'Failed to load shopping list',
+        }));
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(graceTimer);
+      unsubscribe();
+    };
   }, [tripId]);
+
+  // Only trust data that belongs to the current trip.
+  const current = tripId && snapshot?.tripId === tripId ? snapshot : null;
+  const items = current?.items ?? NO_ITEMS;
+  const loading = !!tripId && !current?.settled;
+  const fromCache = current?.fromCache ?? false;
+  const error = current?.error ?? null;
 
   // Generate a new item ID without creating the document
   // Use this when you need to upload an image before creating the item
@@ -90,7 +137,7 @@ export function useShoppingList(tripId: string | null) {
       // Clean up empty optional fields
       // Ensure quantity is an integer (Firestore rules require `quantity is int`)
       // Truncate strings to comply with Firestore rules
-      const cleanedData: Record<string, any> = {
+      const cleanedData: DocumentData = {
         name: (itemData.name || 'Unnamed Item').slice(0, 500),
         quantity: Math.max(1, Math.floor(Number(itemData.quantity) || 1)),
         price: Math.max(0, Number(itemData.price) || 0),
@@ -109,9 +156,14 @@ export function useShoppingList(tripId: string | null) {
       if (itemData.purchaseLocation) cleanedData.purchaseLocation = itemData.purchaseLocation;
       if (itemData.brand) cleanedData.brand = itemData.brand.slice(0, 100);
       if (itemData.notes) cleanedData.notes = itemData.notes.slice(0, 5000);
-      if (itemData.imageUrl) cleanedData.imageUrl = itemData.imageUrl;
       if (itemData.description) cleanedData.description = itemData.description.slice(0, 500);
-      if (itemData.productUrl) cleanedData.productUrl = itemData.productUrl;
+      // Rules only accept https:// images and http(s):// links; drop anything else.
+      const imageUrl = toStorableImageUrl(itemData.imageUrl);
+      if (imageUrl) cleanedData.imageUrl = imageUrl;
+      else if (itemData.imageUrl) console.warn('Ignoring unsupported image URL:', itemData.imageUrl);
+      const productUrl = toStorableLinkUrl(itemData.productUrl);
+      if (productUrl) cleanedData.productUrl = productUrl;
+      else if (itemData.productUrl) console.warn('Ignoring unsupported product URL:', itemData.productUrl);
 
       if (preGeneratedId) {
         // Use setDoc with the pre-generated ID (for items with uploaded images)
@@ -128,6 +180,64 @@ export function useShoppingList(tripId: string | null) {
 
   const updateItem = async (itemId: string, updates: UpdateShoppingListItemInput) => {
     if (!tripId) throw new Error('Trip ID is required');
+
+    // Undefined fields are left as they are; null removes an optional field. URL fields are
+    // never written as empty strings (the rules require a web URL whenever they're present).
+    const cleanedUpdates: DocumentData = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined) continue;
+      if (value === null) {
+        if (!REQUIRED_FIELDS.has(key)) cleanedUpdates[key] = deleteField();
+        continue;
+      }
+
+      // Apply type coercion and length limits based on field
+      switch (key) {
+        case 'quantity':
+          cleanedUpdates[key] = Math.max(1, Math.floor(Number(value) || 1));
+          break;
+        case 'price':
+        case 'purchasePrice':
+          cleanedUpdates[key] = Math.max(0, Number(value) || 0);
+          break;
+        case 'name':
+          cleanedUpdates[key] = String(value).slice(0, 500);
+          break;
+        case 'brand':
+          cleanedUpdates[key] = String(value).slice(0, 100);
+          break;
+        case 'notes':
+          cleanedUpdates[key] = String(value).slice(0, 5000);
+          break;
+        case 'description':
+          cleanedUpdates[key] = String(value).slice(0, 500);
+          break;
+        case 'currency':
+        case 'purchaseCurrency':
+          cleanedUpdates[key] = String(value).slice(0, 3);
+          break;
+        case 'imageUrl':
+        case 'productUrl': {
+          const raw = String(value);
+          if (!raw.trim()) {
+            cleanedUpdates[key] = deleteField();
+            break;
+          }
+          const url = key === 'imageUrl' ? toStorableImageUrl(raw) : toStorableLinkUrl(raw);
+          if (!url) {
+            throw new Error(
+              key === 'imageUrl'
+                ? 'Image links must start with https://'
+                : 'Product links must start with http:// or https://'
+            );
+          }
+          cleanedUpdates[key] = url;
+          break;
+        }
+        default:
+          cleanedUpdates[key] = value;
+      }
+    }
 
     try {
       // Recalculate USD price if price or currency changed
@@ -152,43 +262,8 @@ export function useShoppingList(tripId: string | null) {
           : null;
       }
 
-      // Filter out undefined values and apply Firestore validation rules
-      const cleanedUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
-        if (value !== undefined) {
-          // Apply type coercion and length limits based on field
-          switch (key) {
-            case 'quantity':
-              acc[key] = Math.max(1, Math.floor(Number(value) || 1));
-              break;
-            case 'price':
-            case 'purchasePrice':
-              acc[key] = Math.max(0, Number(value) || 0);
-              break;
-            case 'name':
-              acc[key] = String(value).slice(0, 500);
-              break;
-            case 'brand':
-              acc[key] = String(value).slice(0, 100);
-              break;
-            case 'notes':
-              acc[key] = String(value).slice(0, 5000);
-              break;
-            case 'description':
-              acc[key] = String(value).slice(0, 500);
-              break;
-            case 'currency':
-            case 'purchaseCurrency':
-              acc[key] = String(value).slice(0, 3);
-              break;
-            default:
-              acc[key] = value;
-          }
-        }
-        return acc;
-      }, {} as Record<string, any>);
-
       // Build the final update object
-      const finalUpdate: Record<string, any> = {
+      const finalUpdate: DocumentData = {
         ...cleanedUpdates,
         updatedAt: serverTimestamp(),
       };
@@ -244,6 +319,7 @@ export function useShoppingList(tripId: string | null) {
   return {
     items,
     loading,
+    fromCache,
     error,
     generateItemId,
     addItem,

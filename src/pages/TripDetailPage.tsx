@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, DollarSign, LayoutList, LayoutGrid, ShoppingCart, Search, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTrips } from '../hooks/useTrips';
 import { useShoppingList } from '../hooks/useShoppingList';
 import { useExchangeRate } from '../hooks/useExchangeRate';
-import { convertCurrency } from '../utils/currency';
+import { computeBudget } from '../utils/budget';
+import { decodePayload } from '../utils/payload';
 import { AddShoppingItem, type ItemInitialData } from '../components/ShoppingList/AddShoppingItem';
 import { ShoppingListItem } from '../components/ShoppingList/ShoppingListItem';
 import { ShoppingListItemTile } from '../components/ShoppingList/ShoppingListItemTile';
@@ -24,8 +25,8 @@ export function TripDetailPage() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useAuth();
-  const { trips } = useTrips(user?.uid || null);
+  const { user, loading: authLoading } = useAuth();
+  const { trips, loading: tripsLoading, fromCache: tripsFromCache } = useTrips(user?.uid || null);
   const { items, loading, generateItemId, addItem, updateItem, deleteItem, togglePurchased, saveForLater } = useShoppingList(tripId || null);
   const { rates } = useExchangeRate();
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -47,12 +48,12 @@ export function TripDetailPage() {
       let initialData: ItemInitialData | undefined;
 
       if (itemDataParam) {
-        try {
-          // Decode base64 and parse JSON
-          const decoded = atob(itemDataParam);
-          initialData = JSON.parse(decoded);
-        } catch (e) {
-          console.error('Failed to parse itemData param:', e);
+        // UTF-8 base64url JSON from the extension (older standard-base64 links work too)
+        const decoded = decodePayload(itemDataParam);
+        if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+          initialData = decoded as ItemInitialData;
+        } else {
+          console.error('Failed to parse itemData param');
         }
       }
 
@@ -92,7 +93,7 @@ export function TripDetailPage() {
 
   const filteredAndSortedItems = useMemo(() => {
     // Filter active items (not saved for later)
-    let filtered = activeItems.filter(item => {
+    const filtered = activeItems.filter(item => {
       // Status filter
       if (filters.status === 'purchased' && !item.purchased) return false;
       if (filters.status === 'pending' && item.purchased) return false;
@@ -150,38 +151,34 @@ export function TripDetailPage() {
     }).format(date);
   };
 
-  if (!trip && trips.length > 0) {
+  if (!trip) {
+    if (authLoading || tripsLoading) {
+      return (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading trip...</p>
+        </div>
+      );
+    }
+
+    // Deleted, no longer shared with this user, or (offline) not in the local cache
     return (
       <div className="text-center py-12">
         <p className="text-gray-600">Trip not found</p>
-        <button
-          onClick={() => navigate('/')}
-          className="mt-4 text-blue-600 hover:text-blue-700"
-        >
+        {tripsFromCache && (
+          <p className="text-sm text-gray-500 mt-1">You're offline. Your trips will appear when you reconnect.</p>
+        )}
+        <Link to="/app" className="inline-block mt-4 text-blue-600 hover:text-blue-700">
           Back to Trips
-        </button>
+        </Link>
       </div>
     );
   }
 
-  if (!trip) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading trip...</p>
-      </div>
-    );
-  }
-
-  // Only count active items (not saved for later) toward budget
-  const totalSpent = activeItems.reduce((sum, item) => {
-    // Convert item price to budget currency
-    const itemPrice = item.currency === trip.budgetCurrency
-      ? item.price
-      : convertCurrency(item.price, item.currency, trip.budgetCurrency, rates);
-
-    return sum + (itemPrice * item.quantity);
-  }, 0);
+  // Saved-for-later items are left out of the budget
+  const budget = computeBudget(items, trip.budget, trip.budgetCurrency, rates);
+  const formatAmount = (amount: number) =>
+    `${trip.budgetCurrency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const purchasedCount = activeItems.filter((item) => item.purchased).length;
   const totalItems = activeItems.length;
@@ -189,7 +186,7 @@ export function TripDetailPage() {
   return (
     <div className="max-w-7xl mx-auto">
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/app')}
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors duration-200"
       >
         <ArrowLeft className="w-5 h-5" />
@@ -217,34 +214,44 @@ export function TripDetailPage() {
             <DollarSign className="w-5 h-5" />
             <div className="flex flex-col">
               <span className="font-medium">
-                Budget: {trip.budgetCurrency} {trip.budget.toLocaleString()}
+                {budget.usedPct === null
+                  ? 'No budget set'
+                  : `Budget: ${trip.budgetCurrency} ${trip.budget.toLocaleString()}`}
               </span>
-              <span className="text-sm">
-                Spent: {trip.budgetCurrency} {totalSpent.toFixed(2)}
-              </span>
+              <span className="text-sm">Spent: {formatAmount(budget.spent)}</span>
+              <span className="text-sm">To buy: {formatAmount(budget.toBuy)}</span>
+              {budget.usedPct !== null && (
+                <span className={`text-sm ${budget.free < 0 ? 'text-red-600 font-medium' : ''}`}>
+                  {budget.free < 0
+                    ? `Over budget by ${formatAmount(-budget.free)}`
+                    : `Free: ${formatAmount(budget.free)}`}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Budget Progress Bar */}
-        <div className="mt-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-1">
-            <span>Budget Progress</span>
-            <span>{((totalSpent / trip.budget) * 100).toFixed(1)}%</span>
+        {/* Budget Progress Bar: spent plus still to buy, against the budget */}
+        {budget.usedPct !== null && (
+          <div className="mt-4">
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>Budget used (spent + to buy)</span>
+              <span>{budget.usedPct.toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  budget.free < 0 ? 'bg-red-600' : 'bg-green-600'
+                }`}
+                style={{ width: `${Math.min(budget.usedPct, 100)}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-300 ${
-                totalSpent > trip.budget ? 'bg-red-600' : 'bg-green-600'
-              }`}
-              style={{ width: `${Math.min((totalSpent / trip.budget) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Shopping Summary */}
-      <ShoppingSummary items={activeItems} budgetCurrency={trip.budgetCurrency} />
+      <ShoppingSummary items={activeItems} budget={trip.budget} budgetCurrency={trip.budgetCurrency} />
 
       {/* Shopping List */}
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -253,7 +260,7 @@ export function TripDetailPage() {
             <h2 className="text-2xl font-bold text-gray-900">Shopping List</h2>
             <p className="text-gray-600 mt-1">
               {purchasedCount} of {totalItems} items purchased
-              {filteredAndSortedItems.length !== items.length && (
+              {filteredAndSortedItems.length !== activeItems.length && (
                 <span className="ml-2 text-blue-600">
                   ({filteredAndSortedItems.length} shown)
                 </span>
@@ -321,7 +328,7 @@ export function TripDetailPage() {
           <ExchangeRateIndicator />
         </div>
 
-        {loading ? (
+        {loading && items.length === 0 ? (
           viewMode === 'list' ? (
             <ShoppingListItemSkeletonList count={5} />
           ) : (

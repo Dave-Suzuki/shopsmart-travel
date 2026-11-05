@@ -3,24 +3,30 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import type { CreateTripInput } from '../../types/Trip';
 import { CATEGORIES } from '../../constants/categories';
 import { showError } from '../../utils/toast';
+import { fromDateInput, todayInput } from '../../utils/dates';
 
 interface CreateTripProps {
   onCreateTrip: (trip: CreateTripInput) => Promise<void>;
 }
 
+// Dates are kept as the inputs' "YYYY-MM-DD" values and converted on submit.
+type TripForm = Omit<CreateTripInput, 'startDate' | 'endDate'> & { startDate: string; endDate: string };
+
+const emptyForm = (): TripForm => ({
+  name: '',
+  destination: '',
+  locations: [],
+  categories: [...CATEGORIES], // Start with default categories
+  startDate: todayInput(),
+  endDate: todayInput(),
+  budget: 0,
+  budgetCurrency: 'USD',
+});
+
 export function CreateTrip({ onCreateTrip }: CreateTripProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<CreateTripInput>({
-    name: '',
-    destination: '',
-    locations: [],
-    categories: [...CATEGORIES], // Start with default categories
-    startDate: new Date(),
-    endDate: new Date(),
-    budget: 0,
-    budgetCurrency: 'USD',
-  });
+  const [formData, setFormData] = useState<TripForm>(emptyForm);
   const [newLocation, setNewLocation] = useState({ name: '', currency: 'USD' });
   const [newCategory, setNewCategory] = useState({ value: '', label: '', icon: '📦' });
 
@@ -62,7 +68,13 @@ export function CreateTrip({ onCreateTrip }: CreateTripProps) {
     e.preventDefault();
 
     // Validate dates
-    if (formData.endDate < formData.startDate) {
+    const startDate = fromDateInput(formData.startDate);
+    const endDate = fromDateInput(formData.endDate);
+    if (!startDate || !endDate) {
+      showError('Please enter a start and end date');
+      return;
+    }
+    if (endDate < startDate) {
       showError('End date must be after start date');
       return;
     }
@@ -70,29 +82,16 @@ export function CreateTrip({ onCreateTrip }: CreateTripProps) {
     setLoading(true);
 
     try {
-      await onCreateTrip(formData);
-      setFormData({
-        name: '',
-        destination: '',
-        locations: [],
-        categories: [...CATEGORIES],
-        startDate: new Date(),
-        endDate: new Date(),
-        budget: 0,
-        budgetCurrency: 'USD',
-      });
+      await onCreateTrip({ ...formData, startDate, endDate });
+      setFormData(emptyForm());
       setNewLocation({ name: '', currency: 'USD' });
       setNewCategory({ value: '', label: '', icon: '📦' });
       setIsOpen(false);
-    } catch (error) {
+    } catch {
       showError('Failed to create trip');
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDateForInput = (date: Date) => {
-    return date.toISOString().split('T')[0];
   };
 
   return (
@@ -265,11 +264,8 @@ export function CreateTrip({ onCreateTrip }: CreateTripProps) {
                     type="date"
                     id="startDate"
                     required
-                    value={formatDateForInput(formData.startDate)}
-                    onChange={(e) => {
-                      const [year, month, day] = e.target.value.split('-').map(Number);
-                      setFormData({ ...formData, startDate: new Date(year, month - 1, day) });
-                    }}
+                    value={formData.startDate}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -282,11 +278,8 @@ export function CreateTrip({ onCreateTrip }: CreateTripProps) {
                     type="date"
                     id="endDate"
                     required
-                    value={formatDateForInput(formData.endDate)}
-                    onChange={(e) => {
-                      const [year, month, day] = e.target.value.split('-').map(Number);
-                      setFormData({ ...formData, endDate: new Date(year, month - 1, day) });
-                    }}
+                    value={formData.endDate}
+                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
