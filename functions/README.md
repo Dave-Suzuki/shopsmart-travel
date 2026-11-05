@@ -1,206 +1,108 @@
 # ShopSmart Travel - Firebase Cloud Functions
 
-This directory contains Firebase Cloud Functions for the ShopSmart Travel application.
+Cloud Functions (2nd gen) for ShopSmart Travel, written in TypeScript.
 
-## Functions
+- **Runtime:** Node.js 22 (`engines.node` in `package.json`)
+- **SDKs:** `firebase-functions` 7, `firebase-admin` 13 (initialised once in `src/index.ts`)
 
-### scrapeProductInfo
+| Function | Type | Purpose |
+| --- | --- | --- |
+| `scrapeProductInfo` | HTTPS callable | Reads product details from a shop page URL |
+| `inviteCollaborator` | HTTPS callable | Adds a ShopSmart user to a trip by email |
+| `refreshExchangeRates` | Scheduled, every 6 hours (UTC) | Writes the USD exchange-rate snapshot |
 
-Scrapes product information from URLs using Open Graph metadata and JSON-LD structured data.
+## scrapeProductInfo
 
-**Type:** HTTPS Callable Function
-**Authentication:** Required
+**Auth:** required. **Input:** `{ url: string }`.
+**Output:** `{ name?, image?, description?, price?, currency?, brand?, error? }`. Fetch problems come
+back as a friendly `error` string; invalid input throws `invalid-argument`.
 
-**Input:**
-```typescript
-{
-  url: string; // The product URL to scrape
-}
-```
+Extracts Open Graph / Twitter Card metadata, JSON-LD `Product` data, schema.org meta tags, common
+JavaScript state objects (`__NEXT_DATA__`, `__INITIAL_STATE__`, ...) and common price selectors.
 
-**Output:**
-```typescript
-{
-  name?: string;        // Product name from og:title
-  image?: string;       // Product image URL from og:image
-  description?: string; // Product description from og:description
-  price?: number;       // Product price from JSON-LD or meta tags
-  currency?: string;    // Price currency code (e.g., USD, EUR)
-  error?: string;       // Error message if scraping failed
-}
-```
+Outbound requests are locked down against server-side request forgery (`src/urlSafety.ts`):
 
-**Features:**
-- Extracts Open Graph metadata (og:title, og:image, og:description)
-- Falls back to Twitter Card metadata
-- Extracts price from JSON-LD structured data (schema.org Product)
-- Extracts price from Open Graph and meta tags as fallback
-- Handles relative image URLs by converting to absolute URLs
-- Provides user-friendly error messages
-- 10-second timeout for scraping requests
-- Follows up to 5 redirects
+- Only `http:`/`https:` URLs with no port or port 80/443, and no `user:password@` part.
+- Every connection, including each redirect hop, must go to a **public** IP address. Private,
+  loopback, link-local (including the `169.254.169.254` metadata server), CGNAT, multicast,
+  reserved and documentation ranges are refused for IPv4 and IPv6 (`::1`, `fc00::/7`,
+  `fe80::/10`, IPv4-mapped `::ffff:a.b.c.d`, NAT64, 6to4, ...).
+- The check runs on the address Node actually connects to (custom `lookup` plus a
+  `createConnection` check on guarded http/https agents), so DNS rebinding cannot slip past it.
+  No environment proxy is used.
+- At most 3 redirects, an 8 second deadline for the whole fetch, a 2 MB response cap, and only
+  `text/html` / `application/xhtml+xml` responses are parsed.
+- **Rate limit:** 30 calls per user per rolling hour, tracked in `rateLimits/{uid}` with a
+  Firestore transaction. Over the limit the call fails with `resource-exhausted`
+  ("Too many lookups. Try again in a few minutes.").
 
-**Supported Sites:**
-Works with any website that implements:
-- Open Graph metadata
-- Twitter Card metadata
-- JSON-LD structured data (schema.org Product)
-- Standard meta tags
+## inviteCollaborator
 
-Tested with:
-- Amazon
-- eBay
-- Etsy
-- Most e-commerce platforms
+**Auth:** required. **Input:** `{ tripId: string, email: string }`.
+**Output:** `{ uid: string, displayName: string }` (display name falls back to the email's local part).
 
-## Setup
+Only the trip's creator (`trips/{tripId}.createdBy`) can invite. On success the user is added to
+`trips/{tripId}.owners`, `updatedAt` is bumped, and `profiles/{uid}` is upserted with the user's
+`displayName` and `photoURL` from Firebase Auth (never the email). Errors: `invalid-argument`,
+`not-found` (no trip, or no account with that email), `permission-denied` (caller isn't the creator),
+`already-exists` (already on the trip), `resource-exhausted` (more than 20 invites per hour).
 
-### Prerequisites
+Invites run on the server because clients can no longer list or query the private `users`
+collection.
 
-- Node.js 18 or higher
-- Firebase CLI installed globally
-- Firebase project configured
+## refreshExchangeRates
 
-### Installation
-
-1. Navigate to the functions directory:
-```bash
-cd functions
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-### Configuration
-
-No additional configuration is required. The function uses the Firebase project's default settings.
+Runs every 6 hours (UTC). It fetches `https://api.exchangerate-api.com/v4/latest/USD` (10 second
+timeout) and validates the result: every rate must be a finite positive number, USD must be exactly 1,
+and EUR, GBP and JPY must fall within sanity ranges. It then writes `exchangeRates/{YYYY-MM-DD}` with
+`{ base: 'USD', rates, updatedAt, source }`. If the fetch or the validation fails, the run fails, nothing
+is written, and Cloud Scheduler retries up to 2 times. This function is the only writer of
+`exchangeRates`. Clients read the newest document ordered by `updatedAt`.
 
 ## Development
 
-### Build
-
-Compile TypeScript to JavaScript:
 ```bash
-npm run build
-```
-
-### Test Locally
-
-Run the function locally using Firebase Emulators:
-```bash
-npm run serve
-```
-
-This will start the Functions emulator. You can test the function using the Firebase Emulator UI or by calling it from your local app.
-
-### Shell
-
-Start an interactive shell for testing functions:
-```bash
-npm run shell
-```
-
-Example usage in shell:
-```javascript
-scrapeProductInfo({ url: 'https://example.com/product' })
+cd functions
+npm install
+npm run build   # tsc -> lib/
+npm test        # build + node:test unit tests (IP ranges, URL policy, SSRF against a local server, validators)
+npm run serve   # build + Functions emulator
 ```
 
 ## Deployment
 
-### Deploy All Functions
+**Deploy functions before rules.** The new Firestore rules make `users/{uid}` private and stop
+clients from writing `exchangeRates`. `inviteCollaborator` and `refreshExchangeRates` take over
+those jobs, so deploy them first:
 
-```bash
-npm run deploy
-```
-
-Or from the project root:
 ```bash
 firebase deploy --only functions
+firebase deploy --only firestore:rules
 ```
 
-### Deploy Specific Function
+The GitHub deploy workflow deploys hosting, rules and storage but **not** functions, so run the
+functions deploy by hand before merging rule changes.
+
+After the first deploy you can seed today's exchange rates without waiting for the schedule:
 
 ```bash
-firebase deploy --only functions:scrapeProductInfo
+gcloud scheduler jobs run firebase-schedule-refreshExchangeRates-us-central1 --location=us-central1
 ```
 
-## Monitoring
+Optional: let Firestore delete idle rate-limit documents automatically:
 
-### View Logs
-
-Real-time logs:
 ```bash
-npm run logs
+gcloud firestore fields ttls update expiresAt --collection-group=rateLimits --enable-ttl
 ```
 
-Or:
-```bash
-firebase functions:log
-```
+`rateLimits` is server-only (the Admin SDK bypasses rules), so no client rule should allow access to it.
 
-Filter by function:
+## Logs
+
 ```bash
+npm run logs                                    # or: firebase functions:log
 firebase functions:log --only scrapeProductInfo
 ```
 
-### Error Tracking
-
-Errors are automatically logged to Firebase Console:
-1. Go to Firebase Console
-2. Navigate to Functions
-3. Click on "Logs" tab
-4. Filter by function name or error level
-
-## Cost Considerations
-
-This function makes external HTTP requests using axios. Be aware of:
-- **Cloud Functions invocations**: Free tier includes 2M invocations/month
-- **Outbound networking**: Free tier includes 5GB/month
-- **CPU time**: Free tier includes 400,000 GB-seconds/month
-
-For most use cases, this function should stay within the free tier limits.
-
-## Security
-
-- Function requires authentication (only logged-in users can call it)
-- 10-second timeout prevents long-running requests
-- Input validation for URL format
-- Error handling prevents information leakage
-- No credentials or API keys required
-
-## Troubleshooting
-
-### CORS Errors
-
-The function should not have CORS issues since it's a Cloud Function making server-side requests. If you encounter issues, ensure you're calling it as an HTTPS Callable function, not as a regular HTTP endpoint.
-
-### Timeout Errors
-
-If scraping frequently times out:
-1. Check the target website's response time
-2. Consider increasing the timeout (currently 10 seconds)
-3. Some websites may block automated requests - this is expected behavior
-
-### No Data Returned
-
-If the function returns empty data:
-1. Check if the website has Open Graph tags (view page source)
-2. Try adding more fallback extraction methods
-3. Some websites may require JavaScript rendering (not supported)
-
-### Website Blocking Requests
-
-Some websites block automated requests. This is expected and there's no workaround without violating their terms of service. Users should enter data manually for such sites.
-
-## Future Improvements
-
-Potential enhancements:
-- Support for more product schema types
-- Image optimization/resizing
-- Caching frequently scraped URLs
-- Support for JavaScript-rendered pages using Puppeteer
-- Multi-currency price extraction
-- Product availability detection
-- Review/rating extraction
+Blocked requests to non-public addresses are logged as warnings ("Blocked request to a non-public
+address") along with the caller's uid.

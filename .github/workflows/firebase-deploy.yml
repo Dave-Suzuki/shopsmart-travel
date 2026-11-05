@@ -37,8 +37,8 @@ jobs:
       - name: Security rules tests
         run: npx -y firebase-tools@14 emulators:exec --only firestore --project demo-shopsmart "npx vitest run --config vitest.rules.config.ts"
 
-      - name: Build functions
-        run: npm ci && npm run build
+      - name: Build and test functions
+        run: npm ci && npm test
         working-directory: functions
 
       - name: Build
