@@ -16,11 +16,30 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Set up Java (Firestore emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Security rules tests
+        run: npx -y firebase-tools@14 emulators:exec --only firestore --project demo-shopsmart "npx vitest run --config vitest.rules.config.ts"
+
+      - name: Build functions
+        run: npm ci && npm run build
+        working-directory: functions
 
       - name: Build
         run: npm run build

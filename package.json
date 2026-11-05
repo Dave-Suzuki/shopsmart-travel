@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-shopsmart \"vitest run --config vitest.rules.config.ts\"",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,6 +23,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.10.9",
     "@types/react": "^19.2.5",
@@ -36,6 +40,7 @@
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
     "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^4.1.12",
     "workbox-window": "^7.4.0"
   }
 }
