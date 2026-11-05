@@ -4,6 +4,7 @@ import { Calendar, MapPin, DollarSign, Trash2, Pencil, Share2, Users } from 'luc
 import type { Trip } from '../../types/Trip';
 import { showError } from '../../utils/toast';
 import { formatCurrency } from '../../utils/currency';
+import { calendarDay } from '../../utils/dates';
 
 interface TripCardProps {
   trip: Trip;
@@ -100,7 +101,7 @@ export function TripCard({ trip, onDelete, onEdit, onShare, currentUserId }: Tri
         <div className="flex items-center gap-2 text-gray-600">
           <Calendar className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span>
-            {formatDate(trip.startDate)} - {formatDate(trip.endDate)}
+            {formatDate(calendarDay(trip.startDate))} - {formatDate(calendarDay(trip.endDate))}
           </span>
         </div>
 

@@ -21,6 +21,7 @@ import { ItemFilter, type ItemFilters } from '../components/Item/ItemFilter';
 import { ItemSort, type SortOption } from '../components/Item/ItemSort';
 import { ExchangeRateIndicator } from '../components/Currency/ExchangeRateIndicator';
 import type { ShoppingListItem as Item } from '../types/ShoppingList';
+import { calendarDay } from '../utils/dates';
 
 /** Reads the extension's itemData param (UTF-8 base64url JSON; older standard-base64 links work too). */
 function parseItemData(param: string | null): ItemInitialData | undefined {
@@ -243,7 +244,7 @@ export function TripDetailPage() {
           <div className="flex items-center gap-2 text-gray-600">
             <Calendar className="w-5 h-5 shrink-0" aria-hidden="true" />
             <span>
-              {formatDate(trip.startDate)} - {formatDate(trip.endDate)}
+              {formatDate(calendarDay(trip.startDate))} - {formatDate(calendarDay(trip.endDate))}
             </span>
           </div>
 

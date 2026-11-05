@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { fromDateInput, toDateInput, todayInput } from './dates';
+import { calendarDay, fromDateInput, toDateInput, todayInput } from './dates';
 
 // `process` isn't in the app's type set, so reach it through globalThis.
 const env = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env;
@@ -40,10 +40,11 @@ describe('toDateInput', () => {
 });
 
 describe('fromDateInput', () => {
-  it('parses to local midnight of that day', () => {
+  it('parses to 12:00 UTC on that day', () => {
     const date = fromDateInput('2027-02-10');
     expect(date).not.toBeNull();
-    expect([date!.getFullYear(), date!.getMonth(), date!.getDate(), date!.getHours()]).toEqual([2027, 1, 10, 0]);
+    expect([date!.getUTCFullYear(), date!.getUTCMonth(), date!.getUTCDate(), date!.getUTCHours()]).toEqual([2027, 1, 10, 12]);
+    expect(calendarDay(date!).getDate()).toBe(10);
   });
 
   it.each(SAMPLE_DAYS)('round-trips %s', (day) => {
@@ -83,8 +84,17 @@ describe('in Asia/Tokyo (UTC+9)', () => {
     expect(toDateInput(picked)).toBe('2027-02-10');
   });
 
-  it('parses to Tokyo midnight', () => {
-    expect(fromDateInput('2027-02-10')!.toISOString()).toBe('2027-02-09T15:00:00.000Z');
+  it('parses to noon UTC, the same calendar day in every zone', () => {
+    expect(fromDateInput('2027-02-10')!.toISOString()).toBe('2027-02-10T12:00:00.000Z');
+  });
+
+  it('shows a stored day unchanged and keeps legacy local-midnight dates', () => {
+    const stored = fromDateInput('2027-02-10')!;
+    expect(calendarDay(stored).getDate()).toBe(10);
+    expect(toDateInput(stored)).toBe('2027-02-10');
+    const legacy = new Date(2027, 1, 10); // what older versions saved
+    expect(calendarDay(legacy)).toBe(legacy);
+    expect(toDateInput(legacy)).toBe('2027-02-10');
   });
 
   it.each(SAMPLE_DAYS)('round-trips %s', (day) => {
